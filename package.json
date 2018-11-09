@@ -1,0 +1,21 @@
+{
+  "name": "midisuite",
+  "version": "1.0.0",
+  "description": "",
+  "main": "main.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "electron ."
+  },
+  "author": "Darcy Cox",
+  "license": "ISC",
+  "devDependencies": {
+    "electron": "^1.8.4"
+  },
+  "dependencies": {
+    "midi": "git+https://github.com/mudcube/MIDI.js.git",
+    "midi-player-js": "^2.0.3",
+    "soundfont-player": "^0.10.6",
+    "xmlhttprequest": "^1.8.0"
+  }
+}
