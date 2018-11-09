@@ -2,6 +2,7 @@
 
 var MidiPlayer = require('midi-player-js');
 var sounds = require('soundfont-player');
+var buckets = require('buckets-js');
 
 
 var playButton = document.getElementById('playBtn');
@@ -98,33 +99,43 @@ two.update();
 
 // Bind a function to scale and rotate the group
 // to the animation loop.
-var activeNoteCode = null;
-var noteToClear = null;
+var activeNoteQueue = buckets.Queue();
+var inactiveNoteQueue = buckets.Queue();
 var isPlaying = false;
 two.bind('update', function(frameCount) {
 
     if (isPlaying) {
-        if (activeNoteCode != null) {
-            notes[activeNoteCode].fill = activeColor;
-            activeNoteCode = null;
+        if (!activeNoteQueue.isEmpty()) {
+            // if the queue has more than one note a chord is probably being played.
+            // show up to ten notes at once in this case so they appear simultaneously.
+            if (activeNoteQueue.size() > 1) {
+                var count = 10;
+                while (count > 0 && !activeNoteQueue.isEmpty()) {
+                    notes[activeNoteQueue.dequeue()].fill = activeColor;
+                    count--;
+                }
+            } else { // otherwise just show the one note
+                notes[activeNoteQueue.dequeue()].fill = activeColor;
+            }
         }
-        if (noteToClear != null) {
-            notes[noteToClear].fill = inactiveColor;
-            noteToClear = null;
+        if (!inactiveNoteQueue.isEmpty()) {
+            notes[inactiveNoteQueue.dequeue()].fill = inactiveColor;
         }
     } else {
         notes.forEach(function(note) {
             note.fill = inactiveColor;
         });
+        activeNoteQueue.clear();
+        inactiveNoteQueue.clear();
     }
 
 }).play();
 
 // noteOn event contains the midi note number
 addEventListener('noteOn', function(event) {
-    activeNoteCode = event.detail - 22;
+    activeNoteQueue.enqueue(event.detail - 22);
 });
 
 addEventListener('noteOff', function(event) {
-    noteToClear = event.detail - 22;
+    inactiveNoteQueue.enqueue(event.detail - 22);
 })
