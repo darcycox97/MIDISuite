@@ -20,7 +20,6 @@ exports.initialize = function(midiFile) {
 
 function handleMidiEvent(event, piano) {
     console.log(event);
-
     if (event.name === 'Note on') {
         // non-zero velocity means note on
         if (event.velocity != 0) {

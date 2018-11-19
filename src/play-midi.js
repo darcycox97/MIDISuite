@@ -4,16 +4,14 @@ var pauseButton = document.getElementById('pauseBtn');
 var midiPlayer = require('./src/midiPlayer');
 var midiAnimation = require('./src/midiAnimation');
 
-midiPlayer.initialize('./res/strange_meadow_lark.mid');
+midiPlayer.initialize('./res/clair_de_lune.mid');
 
 playButton.addEventListener('click', function(event) {
-    console.log('clicked play');
     midiPlayer.startPlayer();
     midiAnimation.start();
 });
 
 pauseButton.addEventListener('click', function(event) {
-    console.log('clicked pause');
     midiPlayer.pausePlayer();
     midiAnimation.stop();
 });
@@ -25,4 +23,4 @@ addEventListener('noteOn', function(event) {
 
 addEventListener('noteOff', function(event) {
     midiAnimation.queueNoteOff(event.detail - 22);
-})
+});
