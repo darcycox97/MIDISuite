@@ -6,6 +6,7 @@ var buckets = require('buckets-js');
 
 var ac = new AudioContext();
 var Player = new MidiPlayer.Player();
+var pianoSoundfont;
 
 var millisecPerTick;
 
@@ -16,16 +17,6 @@ for (var i = 0; i < 88; i++) {
     noteEventQueues[i] = buckets.Queue();
     noteLengthQueues[i] = buckets.Queue();
 }
-
-// queue for each note holding all events for that note
-// take two elements at a time, gives noteOn then noteOff pairs.
-// noteOff tick - noteOn tick = length of note
-// then somehow calculate actual length of note based on horizontal speed (TODO later)
-// add to second queue for this note, which contains length of each subsequent note
-// so when a noteOn event happens when playing, we just take the next queue item for this note
-// then send events to midiAnimation as before (actually playing the midi file Player.play()) but this time include note length so size will vary based on note length
-// options for playing the actual sound are either a set delay,
-// or when they reach a certain coordinate they send an event for that note to play
 
 // takes an array of midi events and preprocesses them so that we know the
 // length of notes (and other information) when the midi is played real time
@@ -62,7 +53,6 @@ function preprocessMidiEvents(events) {
 // handler for midi events. determines the type of event and generates custom
 // events based on the event type
 function handleMidiEvent(event, piano) {
-    console.log(event);
     if (event.name === 'Note on') {
 
         var pianoNote = midiNoteToPianoNote(event.noteNumber)
@@ -74,7 +64,7 @@ function handleMidiEvent(event, piano) {
                 pianoNote: pianoNote,
                 noteLength: noteLength
             }}));
-            piano.play(event.noteNumber, ac.currentTime, {gain:event.velocity/127, sustain:0});
+            // piano.play(event.noteNumber, ac.currentTime, {gain:event.velocity/127, sustain:0});
         } else {
             // velocity of zero means note off
             dispatchEvent(new CustomEvent('noteOff', {detail: midiNoteToPianoNote(event.noteNumber)}));
@@ -88,6 +78,10 @@ function handleMidiEvent(event, piano) {
 // converts from midi note number to piano note number (0 to 87)
 function midiNoteToPianoNote(midiNote) {
     return midiNote - 22;
+}
+
+function pianoNoteToMidiNote(pianoNote) {
+    return pianoNote + 22;
 }
 
 // calculates the number of milliseconds for a midi tick
@@ -106,6 +100,7 @@ var exports = module.exports = {};
 // takes a callback to let caller code know when initialization is done
 exports.initialize = function(midiFile, callback) {
     sounds.instrument(ac, 'acoustic_grand_piano').then((piano) => {
+        pianoSoundfont = piano;
         Player.on('midiEvent', (event) => {
             handleMidiEvent(event, piano);
         });
@@ -131,3 +126,7 @@ exports.pausePlayer = function() {
 exports.loadMidiFile = function (file) {
     Player.loadFile('./res/clair_de_lune.mid');
 };
+
+exports.playNote = function(pianoNote) {
+    pianoSoundfont.play(pianoNoteToMidiNote(pianoNote), ac.currentTime, {gain:1, sustain:0});
+}

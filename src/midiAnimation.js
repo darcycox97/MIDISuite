@@ -1,6 +1,5 @@
 const CANVAS_HEIGHT = 1000;
-
-var exports = module.exports = {};
+const CANVAS_WIDTH = 2000;
 
 var buckets = require('buckets-js'); // for queue data structure
 
@@ -9,57 +8,75 @@ var activeColor = 'rgba(200, 100, 0, 0.75)';
 
 // initialize the canvas
 var elem = document.getElementById('two');
-var two = new Two({ width: 2000, height:CANVAS_HEIGHT }).appendTo(elem);
+var two = new Two({ width: CANVAS_WIDTH, height: CANVAS_HEIGHT }).appendTo(elem);
 
 var isPlaying = false;
 
 var timePassed = 0;
-var noteQueue = buckets.Queue();
-var noteWidth = 30;
+// notes waiting to be drawn
+var drawNoteQueue = buckets.Queue();
+// notes drawn that should be kept track of
+var activeNotes = new Set();
 var noteHeight = CANVAS_HEIGHT / 88;
 var offset = 0;
 // units per second (more human readable and easy to work with, adjust this variable to change rate)
 var scrollRatePerSecond = 200;
 // units per frame = units per second / frames per second
 var scrollRate = scrollRatePerSecond / 60;
+
+var playBarWidth = 2;
+var playBar = two.makeRectangle(CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2, playBarWidth, CANVAS_HEIGHT);
+var playBarCollisionPoint = CANVAS_WIDTH / 2 + playBarWidth / 2;
+playBar.fill = "#000000";
+playBar.opacity = 0.5;
+
 two.bind('update', function() {
-    // shifting the scene gives the scrolling effect
-    two.scene.translation.x -= scrollRate;
-    offset += scrollRate;
+
     if (two.timeDelta != undefined) {
         timePassed += two.timeDelta;
     }
 
     if (isPlaying) {
-        if (!noteQueue.isEmpty()) {
+        // shifting the scene gives the scrolling effect
+        two.scene.translation.x -= scrollRate;
+        playBar.translation.x += scrollRate;
+        offset += scrollRate;
+
+        activeNotes.forEach((note) => {
+            if (note.shape.translation.x <= offset + playBarCollisionPoint + note.width / 2) {
+                note.shape.opacity = 0.5;
+                activeNotes.delete(note);
+                dispatchEvent(new CustomEvent('playNote', {detail: note.pianoNote}));
+            }
+        });
+
+        if (!drawNoteQueue.isEmpty()) {
             // if the queue has more than one note a chord is probably being played.
             // show up to ten notes at once in this case so they appear simultaneously.
-            if (noteQueue.size() > 1) {
-                var count = 10;
-                while (count > 0 && !noteQueue.isEmpty()) {
-                    // add note at specified location
-                    drawNoteAtIndex(noteQueue.dequeue(), offset);
-                    count--;
-                }
-            } else { // otherwise just show the one note
-                drawNoteAtIndex(noteQueue.dequeue(), offset);
+            var count = 10;
+            while (count > 0 && !drawNoteQueue.isEmpty()) {
+                // add note at specified location
+                drawNoteAtIndex(drawNoteQueue.dequeue(), offset);
+                count--;
             }
         }
     } else {
-        noteQueue.clear();
+        drawNoteQueue.clear();
     }
 
 }).play(); // effectively 60 updates per second
 
 // helper function to draw a note at the specified index
 function drawNoteAtIndex(noteEvent, xOffset) {
-    console.log(noteEvent.noteLength);
-    two.makeRectangle(
-        2000 + xOffset + calculateNoteWidth(noteEvent.noteLength) / 2,
+    var noteWidth = calculateNoteWidth(noteEvent.noteLength);
+    var note = two.makeRectangle(
+        2000 + xOffset + noteWidth / 2,
         CANVAS_HEIGHT - noteEvent.pianoNote * noteHeight,
-        calculateNoteWidth(noteEvent.noteLength),
-        noteHeight)
-        .fill = activeColor;
+        noteWidth,
+        noteHeight
+    );
+    note.fill = activeColor;
+    activeNotes.add({shape: note, width: noteWidth, pianoNote: noteEvent.pianoNote});
 }
 
 // calculates the correct note width so its length on screen matches the notes realtime length
@@ -67,6 +84,8 @@ function calculateNoteWidth(noteLengthMillisec) {
     // width = scrollRatePerSec * length in seconds
     return scrollRatePerSecond * noteLengthMillisec / 1000;
 }
+
+var exports = module.exports = {};
 
 exports.stop = function() {
     isPlaying = false;
@@ -79,7 +98,7 @@ exports.start = function() {
 // adds to the note on queue. will show the note as played.
 // note should be a piano key: between 0 and 87 inclusive
 exports.queueNoteOn = function(noteOnEvent) {
-    noteQueue.enqueue(noteOnEvent);
+    drawNoteQueue.enqueue(noteOnEvent);
 }
 
 // adds to the note off queue. will stop showing this note.

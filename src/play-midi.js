@@ -4,7 +4,7 @@ var pauseButton = document.getElementById('pauseBtn');
 var midiPlayer = require('./src/midiPlayer');
 var midiAnimation = require('./src/midiAnimation');
 
-midiPlayer.initialize('./res/maple_leaf_rag.mid', () => {
+midiPlayer.initialize('./res/clair_de_lune.mid', () => {
     playButton.disabled = false;
     pauseButton.disabled = false;
 });
@@ -27,3 +27,7 @@ addEventListener('noteOn', function(event) {
 addEventListener('noteOff', function(event) {
     midiAnimation.queueNoteOff(event.detail);
 });
+
+addEventListener('playNote', function(event) {
+    midiPlayer.playNote(event.detail);
+})
