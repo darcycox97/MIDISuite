@@ -7,6 +7,8 @@ var buckets = require('buckets-js');
 var ac = new AudioContext();
 var Player = new MidiPlayer.Player();
 
+var millisecPerTick;
+
 // arrays to hold queues for each note
 var noteEventQueues = new Array(88);
 var noteLengthQueues = new Array(88);
@@ -44,14 +46,15 @@ function preprocessMidiEvents(events) {
     // take pairs of events from the event queue of each note,
     // these will be note on / note off pairs.
     // then calculate the "tick" difference between each to get the relative
-    // note length
+    // note length. Then convert it to a length in milliseconds
     noteEventQueues.forEach((eventQueue, pianoNote) => {
         var noteLengthQueue = noteLengthQueues[pianoNote];
         while (!eventQueue.isEmpty()) {
             var noteOn = eventQueue.dequeue();
             var noteOff = eventQueue.dequeue();
-            var noteLength = noteOff.tick - noteOn.tick;
-            noteLengthQueue.enqueue(noteLength);
+            var tickLength = noteOff.tick - noteOn.tick;
+            var noteLengthMillisec = millisecPerTick * tickLength;
+            noteLengthQueue.enqueue(noteLengthMillisec);
         }
     });
 }
@@ -87,11 +90,20 @@ function midiNoteToPianoNote(midiNote) {
     return midiNote - 22;
 }
 
+// calculates the number of milliseconds for a midi tick
+// assumes tempo of 120bpm (this is the default)
+// formula: 60,000/(bpm * division)
+// note division = ticks per beat
+function calculateTickTime(division) {
+    return 60000 / (120 * division);
+}
+
 
 //////////// MODULE INTERFACE /////////////////////
 var exports = module.exports = {};
 
 // initializes the player with a specified midi file
+//TODO: take a callback to call when initialization is done e.g. undisbable buttons
 exports.initialize = function(midiFile) {
     sounds.instrument(ac, 'acoustic_grand_piano').then((piano) => {
         Player.on('midiEvent', (event) => {
@@ -99,6 +111,7 @@ exports.initialize = function(midiFile) {
         });
         // Player.loadFile('./res/clair_de_lune.mid');
         Player.loadFile(midiFile);
+        millisecPerTick = calculateTickTime(Player.getDivision().division);
         // assume only one midi track so take first index of events array
         preprocessMidiEvents(Player.getEvents()[0]);
     });

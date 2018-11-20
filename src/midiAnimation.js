@@ -18,12 +18,14 @@ var noteQueue = buckets.Queue();
 var noteWidth = 30;
 var noteHeight = CANVAS_HEIGHT / 88;
 var offset = 0;
-var horizontalSpeed = 3;
+// units per second (more human readable and easy to work with, adjust this variable to change rate)
+var scrollRatePerSecond = 200;
+// units per frame = units per second / frames per second
+var scrollRate = scrollRatePerSecond / 60;
 two.bind('update', function() {
-
     // shifting the scene gives the scrolling effect
-    two.scene.translation.x -= horizontalSpeed;
-    offset += horizontalSpeed;
+    two.scene.translation.x -= scrollRate;
+    offset += scrollRate;
     if (two.timeDelta != undefined) {
         timePassed += two.timeDelta;
     }
@@ -47,7 +49,24 @@ two.bind('update', function() {
         noteQueue.clear();
     }
 
-}).play();
+}).play(); // effectively 60 updates per second
+
+// helper function to draw a note at the specified index
+function drawNoteAtIndex(noteEvent, xOffset) {
+    console.log(noteEvent.noteLength);
+    two.makeRectangle(
+        2000 + xOffset + calculateNoteWidth(noteEvent.noteLength) / 2,
+        CANVAS_HEIGHT - noteEvent.pianoNote * noteHeight,
+        calculateNoteWidth(noteEvent.noteLength),
+        noteHeight)
+        .fill = activeColor;
+}
+
+// calculates the correct note width so its length on screen matches the notes realtime length
+function calculateNoteWidth(noteLengthMillisec) {
+    // width = scrollRatePerSec * length in seconds
+    return scrollRatePerSecond * noteLengthMillisec / 1000;
+}
 
 exports.stop = function() {
     isPlaying = false;
@@ -69,15 +88,8 @@ exports.queueNoteOff = function(noteCode) {
 //    inactiveNoteQueue.enqueue(noteCode);
 }
 
-// helper function to draw a note at the specified index
-function drawNoteAtIndex(noteEvent, xOffset) {
-    two.makeRectangle(
-        2000 + xOffset + noteEvent.noteLength / 2,
-        CANVAS_HEIGHT - noteEvent.pianoNote * noteHeight,
-        noteEvent.noteLength,
-        noteHeight)
-        .fill = activeColor;
-}
+
+
 
 
 

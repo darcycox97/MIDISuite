@@ -4,7 +4,7 @@ var pauseButton = document.getElementById('pauseBtn');
 var midiPlayer = require('./src/midiPlayer');
 var midiAnimation = require('./src/midiAnimation');
 
-midiPlayer.initialize('./res/clair_de_lune.mid');
+midiPlayer.initialize('./res/maple_leaf_rag.mid');
 
 playButton.addEventListener('click', function(event) {
     midiPlayer.startPlayer();
