@@ -103,8 +103,8 @@ function calculateTickTime(division) {
 var exports = module.exports = {};
 
 // initializes the player with a specified midi file
-//TODO: take a callback to call when initialization is done e.g. undisbable buttons
-exports.initialize = function(midiFile) {
+// takes a callback to let caller code know when initialization is done
+exports.initialize = function(midiFile, callback) {
     sounds.instrument(ac, 'acoustic_grand_piano').then((piano) => {
         Player.on('midiEvent', (event) => {
             handleMidiEvent(event, piano);
@@ -114,6 +114,7 @@ exports.initialize = function(midiFile) {
         millisecPerTick = calculateTickTime(Player.getDivision().division);
         // assume only one midi track so take first index of events array
         preprocessMidiEvents(Player.getEvents()[0]);
+        callback();
     });
 };
 
