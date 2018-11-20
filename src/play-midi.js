@@ -18,9 +18,9 @@ pauseButton.addEventListener('click', function(event) {
 
 // noteOn & noteOff events contains the midi note number
 addEventListener('noteOn', function(event) {
-    midiAnimation.queueNoteOn(event.detail - 22);
+    midiAnimation.queueNoteOn(event.detail);
 });
 
 addEventListener('noteOff', function(event) {
-    midiAnimation.queueNoteOff(event.detail - 22);
+    midiAnimation.queueNoteOff(event.detail);
 });
