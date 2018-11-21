@@ -1,8 +1,9 @@
-const CANVAS_HEIGHT = 1000;
-const CANVAS_WIDTH = 2000;
+const CANVAS_HEIGHT = 1013;
+const CANVAS_WIDTH = 1800;
 const PREVIEW_HEIGHT = 200;
 const PREVIEW_WIDTH = 300;
 const NOTE_RADIUS = 4;
+const NOTE_HEIGHT = CANVAS_HEIGHT / 88;
 
 var buckets = require('buckets-js'); // for queue data structure
 
@@ -32,6 +33,7 @@ twoPreview.update();
 noteColor.addEventListener('input', function(e) {
     previewNote.fill = noteColor.value;
     twoPreview.update();
+    updateNoteColor();
 });
 bgColor.addEventListener('input', function(e) {
     previewBackground.fill = bgColor.value;
@@ -41,14 +43,16 @@ bgColor.addEventListener('input', function(e) {
 
 
 /////////// MAIN ANIMATION LOOP /////////////////////
+var noteQueues; // all midi information about the notes
 var isPlaying = false;
 var timePassed = 0;
-// notes waiting to be drawn
-var drawNoteQueue = buckets.Queue();
-// notes drawn that should be kept track of
-var activeNotes = new Set();
-// 88 notes on a piano so split height equally for each note
-var noteHeight = CANVAS_HEIGHT / 88;
+// notes that need to be kept track of
+var activeNoteQueues = new Array(88);
+for (var i = 0; i < 88; i++) {
+    activeNoteQueues[i] = buckets.Queue();
+}
+// keep track of all drawn shapes so we can clear the screen
+var allNotes = new Set();
 // keep track of how much the scene has moved
 var offset = 0;
 // units per second (more human readable and easy to work with, adjust this variable to change rate)
@@ -64,58 +68,57 @@ playBar.opacity = 0.5;
 
 var background = two.makeRectangle(CANVAS_WIDTH/2, CANVAS_HEIGHT/2, CANVAS_WIDTH, CANVAS_HEIGHT);
 background.fill = bgColor.value;
-background.noStroke();
 
 two.bind('update', function() {
 
-    if (two.timeDelta != undefined) {
-        timePassed += two.timeDelta;
-    }
-
     if (isPlaying) {
+
+        if (two.timeDelta != undefined) {
+            timePassed += two.timeDelta; // in milliseconds
+        }
+
         // shifting the scene gives the scrolling effect
         two.scene.translation.x -= scrollRate;
         playBar.translation.x += scrollRate;
         background.translation.x += scrollRate;
         offset += scrollRate;
+        // make sure timing is correct so catch up if behind
+        var expectedOffset = scrollRatePerSecond * timePassed / 1000;
+        if (offset != expectedOffset) {
+            offset = expectedOffset;
+            two.scene.translation.x = -1 * expectedOffset;
+            playBar.translation.x = expectedOffset + CANVAS_WIDTH/2;
+            background.translation.x = expectedOffset + CANVAS_WIDTH/2;
+        }
 
-        activeNotes.forEach((note) => {
-            if (note.shape.translation.x <= offset + playBarCollisionPoint + note.width / 2) {
-                note.shape.opacity = 0.5;
-                activeNotes.delete(note);
-                dispatchEvent(new CustomEvent('playNote', {detail: note.pianoNote}));
+        activeNoteQueues.forEach((noteQueue) => {
+            if (!noteQueue.isEmpty()) {
+                var note = noteQueue.peek();
+                if (note.shape.translation.x <= offset + playBarCollisionPoint + note.width / 2) {
+                    note.shape.opacity = 0.5;
+                    noteQueue.dequeue();
+                    //dispatchEvent(new CustomEvent('playNote', {detail: note.pianoNote}));
+                }
             }
         });
-
-        if (!drawNoteQueue.isEmpty()) {
-            // if the queue has more than one note a chord is probably being played.
-            // show up to ten notes at once in this case so they appear simultaneously.
-            var count = 10;
-            while (count > 0 && !drawNoteQueue.isEmpty()) {
-                // add note at specified location
-                drawNoteAtIndex(drawNoteQueue.dequeue(), offset);
-                count--;
-            }
-        }
-    } else {
-        drawNoteQueue.clear();
     }
 
 }).play(); // effectively 60 updates per second
 
 // helper function to draw a note at the specified index
-function drawNoteAtIndex(noteEvent, xOffset) {
-    var noteWidth = calculateNoteWidth(noteEvent.noteLength);
+// adds to the provided queue to keep track of the notes
+function drawNote(noteWidth, xOffset, noteIndex, activeNoteQueue) {
     var note = two.makeRoundedRectangle(
-        2000 + xOffset + noteWidth / 2,
-        CANVAS_HEIGHT - noteEvent.pianoNote * noteHeight,
+        CANVAS_WIDTH + xOffset + noteWidth / 2,
+        CANVAS_HEIGHT - noteIndex * NOTE_HEIGHT,
         noteWidth,
-        noteHeight,
+        NOTE_HEIGHT,
         NOTE_RADIUS
     );
     note.fill = noteColor.value;
     note.noStroke();
-    activeNotes.add({shape: note, width: noteWidth, pianoNote: noteEvent.pianoNote});
+    allNotes.add(note);
+    activeNoteQueue.enqueue({shape: note, width: noteWidth, pianoNote: noteIndex});
 }
 
 // calculates the correct note width so its length on screen matches the notes realtime length
@@ -124,13 +127,61 @@ function calculateNoteWidth(noteLengthMillisec) {
     return scrollRatePerSecond * noteLengthMillisec / 1000;
 }
 
+// calculates how far from the origin (x = 0) this note should
+// be drawn so that it plays at the given absolute time in seconds.
+// x = 0 means play right now
+function calculateNoteOffset(absoluteTimeSec) {
+    return scrollRatePerSecond * absoluteTimeSec;
+}
+
 function updateScrollSpeed() {
     scrollRatePerSecond = scrollSpeed.value;
     scrollRate = scrollRatePerSecond / 60;
+    drawEntireMidiFile();
 }
 
 function updateBackgroundColor() {
     background.fill = bgColor.value;
+}
+
+function updateNoteColor() {
+    allNotes.forEach((note) => {
+        note.fill = noteColor.value;
+    })
+}
+
+function drawEntireMidiFile() {
+
+    if (noteQueues != undefined) {
+        isPlaying = false;
+        timePassed = 0;
+        two.scene.translation.clear();
+        background.translation.set(CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2);
+        playBar.translation.set(CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2);
+        offset = 0;
+
+        allNotes.forEach((note) => {
+            two.remove(note);
+        });
+
+        activeNoteQueues.forEach((noteQueue) => {
+            noteQueue.clear();
+        })
+
+        noteQueues.forEach((noteQueue, pianoNote) => {
+            var numNoteEvents = noteQueue.size();
+            var activeNoteQueue = activeNoteQueues[pianoNote];
+            var count = 0;
+            while (count < numNoteEvents) {
+                var noteInfo = noteQueue.dequeue();
+                noteQueue.enqueue(noteInfo);
+                var noteWidth = calculateNoteWidth(noteInfo.noteLength);
+                var noteOffset = calculateNoteOffset(noteInfo.absoluteTime);
+                drawNote(noteWidth, noteOffset, pianoNote, activeNoteQueue);
+                count++;
+            }
+        });
+    }
 }
 
 var exports = module.exports = {};
@@ -165,69 +216,8 @@ exports.queueNoteOff = function(noteCode) {
 //    inactiveNoteQueue.enqueue(noteCode);
 }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-// var notes = [];
-// var width = 100;
-// var height = CANVAS_HEIGHT / 88;
-//
-// for (var i = 0; i < 88; i++) {
-//     var note = two.makeRectangle(0, CANVAS_HEIGHT - i * height, width, height);
-//     note.fill = inactiveColor;
-//     notes[i] = note;
-// }
-//
-// var group = two.makeGroup(notes);
-// group.translation.set(width / 2 , height / 2);
-// group.scale = 0.5;
-//
-// two.update();
-//
-//
-// var activeNoteQueue = buckets.Queue();
-// var inactiveNoteQueue = buckets.Queue();
-// var isPlaying = false;
-// two.bind('update', function(frameCount) {
-//
-//     if (isPlaying) {
-//         if (!activeNoteQueue.isEmpty()) {
-//             // if the queue has more than one note a chord is probably being played.
-//             // show up to ten notes at once in this case so they appear simultaneously.
-//             if (activeNoteQueue.size() > 1) {
-//                 var count = 10;
-//                 while (count > 0 && !activeNoteQueue.isEmpty()) {
-//                     notes[activeNoteQueue.dequeue()].fill = activeColor;
-//                     count--;
-//                 }
-//             } else { // otherwise just show the one note
-//                 notes[activeNoteQueue.dequeue()].fill = activeColor;
-//             }
-//         }
-//         if (!inactiveNoteQueue.isEmpty()) {
-//             notes[inactiveNoteQueue.dequeue()].fill = inactiveColor;
-//         }
-//     } else {
-//         notes.forEach(function(note) {
-//             note.fill = inactiveColor;
-//         });
-//         activeNoteQueue.clear();
-//         inactiveNoteQueue.clear();
-//     }
-//
-// }).play();
+// pre-draws all notes
+exports.initialize = function(noteQueuesLocal) {
+    noteQueues = noteQueuesLocal;
+    drawEntireMidiFile();
+}

@@ -6,21 +6,20 @@ var pauseButton = document.getElementById('pauseBtn');
 var fileInput = document.getElementById('fileInput');
 
 playButton.addEventListener('click', function(event) {
-    midiPlayer.startPlayer();
     midiAnimation.start();
 });
 
 pauseButton.addEventListener('click', function(event) {
-    midiPlayer.pausePlayer();
     midiAnimation.pause();
 });
 
 // assumes the file is located in ./res/*
 fileInput.addEventListener('input', function(event) {
     var fileName = fileInput.files[0].name;
-    midiPlayer.initialize('./res/' + fileName, () => {
+    midiPlayer.initialize('./res/' + fileName, (noteQueues) => {
         playButton.disabled = false;
         pauseButton.disabled = false;
+        midiAnimation.initialize(noteQueues);
     });
 });
 
@@ -35,4 +34,4 @@ addEventListener('noteOff', function(event) {
 
 addEventListener('playNote', function(event) {
     midiPlayer.playNote(event.detail);
-})
+});
