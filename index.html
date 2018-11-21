@@ -6,13 +6,31 @@
     <script src="./src/two.min.js"></script>
 </head>
 <body>
-
-    <div>
+    <div id="two"></div>
+    <div id="ui">
         <button id="playBtn" disabled="true">Start</button>
         <button id="pauseBtn" disabled="true">Pause</button>
     </div>
-
-    <div id="two"></div>
+    <div>
+        <input type="file" accept=".mid" id="fileInput"/>
+    </div>
+    <div>
+        <input id="scrollSpeed" name="scrollSpeed" type="range" min="10" max="500" value="50" />
+        <label for="scrollSpeed">Scrolling Speed</label>
+    </div>
+    <div>
+        <input id="noteColor" type="color" name="noteColor" value="#FFFFFF"/>
+        <label for="noteColor">Note Color</label>
+    </div>
+    <div>
+        <input id="bgColor" type="color" name="backgroundColor" />
+        <label for="backgroundColor">Background Color</label>
+    </div>
+    <div id="two-preview">
+        <p>
+            Preview
+        </p>
+    </div>
     <script src="./src/play-midi.js"></script>
 </body>
 </html>

@@ -1,13 +1,9 @@
-
-var playButton = document.getElementById('playBtn');
-var pauseButton = document.getElementById('pauseBtn');
 var midiPlayer = require('./src/midiPlayer');
 var midiAnimation = require('./src/midiAnimation');
 
-midiPlayer.initialize('./res/clair_de_lune.mid', () => {
-    playButton.disabled = false;
-    pauseButton.disabled = false;
-});
+var playButton = document.getElementById('playBtn');
+var pauseButton = document.getElementById('pauseBtn');
+var fileInput = document.getElementById('fileInput');
 
 playButton.addEventListener('click', function(event) {
     midiPlayer.startPlayer();
@@ -16,7 +12,16 @@ playButton.addEventListener('click', function(event) {
 
 pauseButton.addEventListener('click', function(event) {
     midiPlayer.pausePlayer();
-    midiAnimation.stop();
+    midiAnimation.pause();
+});
+
+// assumes the file is located in ./res/*
+fileInput.addEventListener('input', function(event) {
+    var fileName = fileInput.files[0].name;
+    midiPlayer.initialize('./res/' + fileName, () => {
+        playButton.disabled = false;
+        pauseButton.disabled = false;
+    });
 });
 
 // noteOn & noteOff events contains the midi note number

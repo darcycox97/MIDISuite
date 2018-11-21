@@ -1,34 +1,70 @@
 const CANVAS_HEIGHT = 1000;
 const CANVAS_WIDTH = 2000;
+const PREVIEW_HEIGHT = 200;
+const PREVIEW_WIDTH = 300;
+const NOTE_RADIUS = 4;
 
 var buckets = require('buckets-js'); // for queue data structure
-
-var inactiveColor = 'rgba(0, 200, 255, 0.75)';
-var activeColor = 'rgba(200, 100, 0, 0.75)';
 
 // initialize the canvas
 var elem = document.getElementById('two');
 var two = new Two({ width: CANVAS_WIDTH, height: CANVAS_HEIGHT }).appendTo(elem);
 
-var isPlaying = false;
+// init preview canvas
+var preview = document.getElementById('two-preview');
+var twoPreview = new Two({ width: CANVAS_WIDTH, height: CANVAS_HEIGHT }).appendTo(preview);
 
+// obtain references to UI elements and register listeners for change in values
+var scrollSpeed = document.getElementById('scrollSpeed');
+var noteColor = document.getElementById('noteColor');
+var bgColor = document.getElementById('bgColor');
+
+scrollSpeed.addEventListener('input', updateScrollSpeed);
+
+//////////// PREVIEW CANVAS ///////////////////
+var previewBackground = twoPreview.makeRectangle(PREVIEW_WIDTH / 2, PREVIEW_HEIGHT / 2, PREVIEW_WIDTH, PREVIEW_HEIGHT);
+previewBackground.noStroke();
+previewBackground.fill = bgColor.value;
+var previewNote = twoPreview.makeRoundedRectangle(PREVIEW_WIDTH / 2, PREVIEW_HEIGHT / 2, 80, CANVAS_HEIGHT / 88, NOTE_RADIUS);
+previewNote.noStroke();
+previewNote.fill = noteColor.value;
+twoPreview.update();
+noteColor.addEventListener('input', function(e) {
+    previewNote.fill = noteColor.value;
+    twoPreview.update();
+});
+bgColor.addEventListener('input', function(e) {
+    previewBackground.fill = bgColor.value;
+    twoPreview.update();
+    updateBackgroundColor(); // for the main canvas
+});
+
+
+/////////// MAIN ANIMATION LOOP /////////////////////
+var isPlaying = false;
 var timePassed = 0;
 // notes waiting to be drawn
 var drawNoteQueue = buckets.Queue();
 // notes drawn that should be kept track of
 var activeNotes = new Set();
+// 88 notes on a piano so split height equally for each note
 var noteHeight = CANVAS_HEIGHT / 88;
+// keep track of how much the scene has moved
 var offset = 0;
 // units per second (more human readable and easy to work with, adjust this variable to change rate)
-var scrollRatePerSecond = 200;
+var scrollRatePerSecond = scrollSpeed.value;
 // units per frame = units per second / frames per second
 var scrollRate = scrollRatePerSecond / 60;
 
 var playBarWidth = 2;
 var playBar = two.makeRectangle(CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2, playBarWidth, CANVAS_HEIGHT);
 var playBarCollisionPoint = CANVAS_WIDTH / 2 + playBarWidth / 2;
-playBar.fill = "#000000";
+playBar.fill = '#000000';
 playBar.opacity = 0.5;
+
+var background = two.makeRectangle(CANVAS_WIDTH/2, CANVAS_HEIGHT/2, CANVAS_WIDTH, CANVAS_HEIGHT);
+background.fill = bgColor.value;
+background.noStroke();
 
 two.bind('update', function() {
 
@@ -40,6 +76,7 @@ two.bind('update', function() {
         // shifting the scene gives the scrolling effect
         two.scene.translation.x -= scrollRate;
         playBar.translation.x += scrollRate;
+        background.translation.x += scrollRate;
         offset += scrollRate;
 
         activeNotes.forEach((note) => {
@@ -69,13 +106,15 @@ two.bind('update', function() {
 // helper function to draw a note at the specified index
 function drawNoteAtIndex(noteEvent, xOffset) {
     var noteWidth = calculateNoteWidth(noteEvent.noteLength);
-    var note = two.makeRectangle(
+    var note = two.makeRoundedRectangle(
         2000 + xOffset + noteWidth / 2,
         CANVAS_HEIGHT - noteEvent.pianoNote * noteHeight,
         noteWidth,
-        noteHeight
+        noteHeight,
+        NOTE_RADIUS
     );
-    note.fill = activeColor;
+    note.fill = noteColor.value;
+    note.noStroke();
     activeNotes.add({shape: note, width: noteWidth, pianoNote: noteEvent.pianoNote});
 }
 
@@ -85,14 +124,33 @@ function calculateNoteWidth(noteLengthMillisec) {
     return scrollRatePerSecond * noteLengthMillisec / 1000;
 }
 
+function updateScrollSpeed() {
+    scrollRatePerSecond = scrollSpeed.value;
+    scrollRate = scrollRatePerSecond / 60;
+}
+
+function updateBackgroundColor() {
+    background.fill = bgColor.value;
+}
+
 var exports = module.exports = {};
 
-exports.stop = function() {
+exports.pause = function() {
     isPlaying = false;
 }
 
 exports.start = function() {
     isPlaying = true;
+}
+
+exports.stop = function() {
+    isPlaying = false;
+    // clear all existing shapes
+    activeNotes.forEach((note) => {
+        note.shape.fill = '#FFFFFF';
+        note.shape.noStroke();
+    })
+    activeNotes.clear();
 }
 
 // adds to the note on queue. will show the note as played.
