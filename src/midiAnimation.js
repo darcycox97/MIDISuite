@@ -97,7 +97,7 @@ two.bind('update', function() {
                 if (note.shape.translation.x <= offset + playBarCollisionPoint + note.width / 2) {
                     note.shape.opacity = 0.5;
                     noteQueue.dequeue();
-                    //dispatchEvent(new CustomEvent('playNote', {detail: note.pianoNote}));
+                    dispatchEvent(new CustomEvent('playNote', {detail: note.pianoNote}));
                 }
             }
         });
