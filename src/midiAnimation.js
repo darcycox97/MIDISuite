@@ -70,6 +70,7 @@ playBar.opacity = 0.2;
 
 var background = two.makeRectangle(CANVAS_WIDTH/2, CANVAS_HEIGHT/2, CANVAS_WIDTH, CANVAS_HEIGHT);
 background.fill = bgColor.value;
+background.noStroke();
 
 two.bind('update', function() {
 
@@ -119,6 +120,7 @@ function drawNote(noteWidth, xOffset, noteIndex, activeNoteQueue) {
     );
     note.fill = noteColor.value;
     note.noStroke();
+    note.lineWidth = 0;
     allNotes.add(note);
     activeNoteQueue.enqueue({shape: note, width: noteWidth, pianoNote: noteIndex});
 }

@@ -17,6 +17,7 @@
     "midi": "git+https://github.com/mudcube/MIDI.js.git",
     "midi-player-js": "^2.0.3",
     "soundfont-player": "^0.10.6",
+    "svgexport": "^0.3.2",
     "xmlhttprequest": "^1.8.0"
   }
 }

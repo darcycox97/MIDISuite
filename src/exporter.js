@@ -1,6 +1,9 @@
 // module to export the animation to an mp4 file
 const fs = require('fs');
 const os = require('os');
+const svgexport = require('svgexport');
+
+console.log(svgexport);
 
 const WIDTH_PATTERN = '$W$';
 const HEIGHT_PATTERN = '$H$';
@@ -18,7 +21,6 @@ function createSvgFile(dimensions) {
     var fileName = testPath + count + '.svg'
     var svgStart = svgWrapperStart.replace(WIDTH_PATTERN, dimensions.width).
                     replace(HEIGHT_PATTERN, dimensions.height);
-    console.log(svgStart);
     count++;
     fs.open(fileName, 'w', (err, fd) => {
         if (err) throw err;
@@ -26,6 +28,8 @@ function createSvgFile(dimensions) {
             if (err) throw err;
             fs.close(fd, (err) => {
                 if (err) throw err;
+                console.log('converting to png');
+                svgexport.cli([fileName, fileName.replace('.svg', '.png'), '1920:1080']);
             });
         });
     });
