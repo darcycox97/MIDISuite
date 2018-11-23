@@ -3,9 +3,11 @@ const midiAnimation = require('./src/midiAnimation');
 const remote = require('electron').remote;
 const dialog = remote.dialog;
 const path = require('path');
+const exporter = require('./src/exporter');
 
 var playButton = document.getElementById('playBtn');
 var pauseButton = document.getElementById('pauseBtn');
+var exportButton = document.getElementById('exportBtn');
 var fileInput = document.getElementById('fileInput');
 var fileInputDisplay = document.getElementById('fileInputDisplay');
 
@@ -15,6 +17,10 @@ playButton.addEventListener('click', function(event) {
 
 pauseButton.addEventListener('click', function(event) {
     midiAnimation.pause();
+});
+
+exportButton.addEventListener('click', function(event) {
+    exporter.export(midiAnimation.dimensions);
 });
 
 // assumes the file is located in ./res/*
@@ -27,6 +33,7 @@ fileInput.addEventListener('click', function(event) {
             }
         ]
     },(filePaths) => {
+        if (!filePaths) return;
         var midiFile = filePaths[0];
         // use the midiPlayer to parse the file and send the output to
         // the animation module so it can draw the notes etc

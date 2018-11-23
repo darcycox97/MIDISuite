@@ -1,5 +1,7 @@
-const CANVAS_HEIGHT = 1013;
-const CANVAS_WIDTH = 1800;
+//TODO make these globally accessible (just put into module.exports and pass as init parameter to exporter)
+//todo toggle full screen
+const CANVAS_HEIGHT = 619;
+const CANVAS_WIDTH = 1100;
 const PREVIEW_HEIGHT = 200;
 const PREVIEW_WIDTH = 300;
 const NOTE_RADIUS = 4;
@@ -64,7 +66,7 @@ var playBarWidth = 2;
 var playBar = two.makeRectangle(CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2, playBarWidth, CANVAS_HEIGHT);
 var playBarCollisionPoint = CANVAS_WIDTH / 2 + playBarWidth / 2;
 playBar.fill = '#000000';
-playBar.opacity = 0.5;
+playBar.opacity = 0.2;
 
 var background = two.makeRectangle(CANVAS_WIDTH/2, CANVAS_HEIGHT/2, CANVAS_WIDTH, CANVAS_HEIGHT);
 background.fill = bgColor.value;
@@ -220,4 +222,9 @@ exports.queueNoteOff = function(noteCode) {
 exports.initialize = function(noteQueuesLocal) {
     noteQueues = noteQueuesLocal;
     drawEntireMidiFile();
+}
+
+exports.dimensions = {
+    width: CANVAS_WIDTH,
+    height: CANVAS_HEIGHT
 }
