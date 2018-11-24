@@ -13,6 +13,7 @@
     "electron": ">=1.8.8"
   },
   "dependencies": {
+    "async": "^2.6.1",
     "buckets-js": "^1.98.2",
     "midi": "git+https://github.com/mudcube/MIDI.js.git",
     "midi-player-js": "^2.0.3",

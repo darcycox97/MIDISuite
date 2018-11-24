@@ -47,6 +47,7 @@ bgColor.addEventListener('input', function(e) {
 /////////// MAIN ANIMATION LOOP /////////////////////
 var noteQueues; // all midi information about the notes
 var isPlaying = false;
+var isExporting = false;
 var timePassed = 0;
 // notes that need to be kept track of
 var activeNoteQueues = new Array(88);
@@ -66,7 +67,7 @@ var playBarWidth = 2;
 var playBar = two.makeRectangle(CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2, playBarWidth, CANVAS_HEIGHT);
 var playBarCollisionPoint = CANVAS_WIDTH / 2 + playBarWidth / 2;
 playBar.fill = '#000000';
-playBar.opacity = 0.2;
+playBar.opacity = 0.5;
 
 var background = two.makeRectangle(CANVAS_WIDTH/2, CANVAS_HEIGHT/2, CANVAS_WIDTH, CANVAS_HEIGHT);
 background.fill = bgColor.value;
@@ -76,15 +77,19 @@ two.bind('update', function() {
 
     if (isPlaying) {
 
-        if (two.timeDelta != undefined) {
+        // if we are exporting then animation should not match real time
+        if (!isExporting && two.timeDelta != undefined) {
             timePassed += two.timeDelta; // in milliseconds
         }
 
-        // shifting the scene gives the scrolling effect
-        two.scene.translation.x -= scrollRate;
-        playBar.translation.x += scrollRate;
-        background.translation.x += scrollRate;
-        offset += scrollRate;
+        if (!isExporting) {
+            // shifting the scene gives the scrolling effect
+            two.scene.translation.x -= scrollRate;
+            playBar.translation.x += scrollRate;
+            background.translation.x += scrollRate;
+            offset += scrollRate;
+        }
+
         // make sure timing is correct so catch up if behind
         var expectedOffset = scrollRatePerSecond * timePassed / 1000;
         if (offset != expectedOffset) {
@@ -98,15 +103,17 @@ two.bind('update', function() {
             if (!noteQueue.isEmpty()) {
                 var note = noteQueue.peek();
                 if (note.shape.translation.x <= offset + playBarCollisionPoint + note.width / 2) {
-                    note.shape.opacity = 0.5;
+                    note.shape.opacity = 0.2;
                     noteQueue.dequeue();
-                    dispatchEvent(new CustomEvent('playNote', {detail: note.pianoNote}));
+                    if (!isExporting) {
+                        dispatchEvent(new CustomEvent('playNote', {detail: note.pianoNote}));
+                    }
                 }
             }
         });
     }
 
-}).play(); // effectively 60 updates per second
+}).play();
 
 // helper function to draw a note at the specified index
 // adds to the provided queue to keep track of the notes
@@ -121,7 +128,7 @@ function drawNote(noteWidth, xOffset, noteIndex, activeNoteQueue) {
     note.fill = noteColor.value;
     note.noStroke();
     note.lineWidth = 0;
-    allNotes.add(note);
+    allNotes.add({shape: note, width: noteWidth});
     activeNoteQueue.enqueue({shape: note, width: noteWidth, pianoNote: noteIndex});
 }
 
@@ -150,7 +157,7 @@ function updateBackgroundColor() {
 
 function updateNoteColor() {
     allNotes.forEach((note) => {
-        note.fill = noteColor.value;
+        note.shape.fill = noteColor.value;
     })
 }
 
@@ -165,7 +172,7 @@ function drawEntireMidiFile() {
         offset = 0;
 
         allNotes.forEach((note) => {
-            two.remove(note);
+            two.remove(note.shape);
         });
 
         activeNoteQueues.forEach((noteQueue) => {
@@ -188,45 +195,72 @@ function drawEntireMidiFile() {
     }
 }
 
+function isFinished() {
+
+    var allNotesInactive = true;
+    activeNoteQueues.forEach((noteQueue) => {
+        // if any notes are active then we are not finished
+        if (!noteQueue.isEmpty()) {
+            allNotesInactive = false;
+            return;
+        }
+    });
+
+    if (!allNotesInactive) {
+        return false;
+    }
+
+    // if we get to this point all queues are empty
+    // which means all notes have been played.
+    // we now need to check if all notes are off screen,
+    // which is when the animation is "finished"
+    var allNotesOffScreen = true;
+    allNotes.forEach((note) => {
+        if (note.shape.translation.x >= offset - note.width / 2) {
+            allNotesOffScreen = false;
+        }
+    });
+
+    return allNotesOffScreen;
+}
+
 var exports = module.exports = {};
 
 exports.pause = function() {
     isPlaying = false;
-}
+};
 
 exports.start = function() {
     isPlaying = true;
-}
-
-exports.stop = function() {
-    isPlaying = false;
-    // clear all existing shapes
-    activeNotes.forEach((note) => {
-        note.shape.fill = '#FFFFFF';
-        note.shape.noStroke();
-    })
-    activeNotes.clear();
-}
-
-// adds to the note on queue. will show the note as played.
-// note should be a piano key: between 0 and 87 inclusive
-exports.queueNoteOn = function(noteOnEvent) {
-    drawNoteQueue.enqueue(noteOnEvent);
-}
-
-// adds to the note off queue. will stop showing this note.
-// note code should be between 0 and 87 inclusive
-exports.queueNoteOff = function(noteCode) {
-//    inactiveNoteQueue.enqueue(noteCode);
-}
+};
 
 // pre-draws all notes
 exports.initialize = function(noteQueuesLocal) {
     noteQueues = noteQueuesLocal;
     drawEntireMidiFile();
-}
+};
+
+exports.setExporting = function(exporting) {
+    isExporting = exporting;
+
+    // whether we are starting or stopping exporting, we want to reset the
+    // animation to its initial state
+    drawEntireMidiFile();
+    if (isExporting) {
+        isPlaying = true;
+    } else {
+        isPlaying = false;
+    }
+};
+
+exports.skipForwardBySeconds = function(secondsToAdd) {
+    timePassed += secondsToAdd * 1000; // timePassed is in ms
+    two.update();
+};
 
 exports.dimensions = {
     width: CANVAS_WIDTH,
     height: CANVAS_HEIGHT
-}
+};
+
+exports.finished = isFinished;

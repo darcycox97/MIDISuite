@@ -20,39 +20,40 @@ pauseButton.addEventListener('click', function(event) {
 });
 
 exportButton.addEventListener('click', function(event) {
-    exporter.export(midiAnimation.dimensions);
+    exportPath = dialog.showSaveDialog({
+        filters: [
+            {
+                name: "MP4",
+                extensions: ["mp4"]
+            }
+        ]
+    });
+    if (!exportPath) return;
+
+    exporter.export(exportPath, midiAnimation.dimensions);
+    //exporter.export(midiAnimation.dimensions);
 });
 
 // assumes the file is located in ./res/*
 fileInput.addEventListener('click', function(event) {
-    dialog.showOpenDialog({
+    filePaths = dialog.showOpenDialog({
         filters: [
             {
                 name: "MIDI Files",
                 extensions: ["mid"]
             }
         ]
-    },(filePaths) => {
-        if (!filePaths) return;
-        var midiFile = filePaths[0];
-        // use the midiPlayer to parse the file and send the output to
-        // the animation module so it can draw the notes etc
-        midiPlayer.initialize(midiFile, (noteQueues) => {
-            playButton.disabled = false;
-            pauseButton.disabled = false;
-            midiAnimation.initialize(noteQueues);
-        });
-        fileInputDisplay.innerHTML = path.basename(midiFile);
     });
-});
-
-// noteOn & noteOff events contains the midi note number
-addEventListener('noteOn', function(event) {
-    midiAnimation.queueNoteOn(event.detail);
-});
-
-addEventListener('noteOff', function(event) {
-    midiAnimation.queueNoteOff(event.detail);
+    if (!filePaths) return;
+    var midiFile = filePaths[0];
+    // use the midiPlayer to parse the file and send the output to
+    // the animation module so it can draw the notes etc
+    midiPlayer.initialize(midiFile, (noteQueues) => {
+        playButton.disabled = false;
+        pauseButton.disabled = false;
+        midiAnimation.initialize(noteQueues);
+    });
+    fileInputDisplay.innerHTML = path.basename(midiFile);
 });
 
 addEventListener('playNote', function(event) {

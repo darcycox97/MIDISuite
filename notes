@@ -1,0 +1,14 @@
+ffmpeg command to convert images into video:
+ffmpeg -r 1 -f image2 -s 1920x1080 -i %03d.png -vcodec libx264 -crf 15  -pix_fmt yuv420p test.mp4
+-r is frame rate (try 15 30 and 60), %03d.png means 001.png 002.png etc. probably need 5 digits cause lots of pngs will exist
+
+
+simulate animation in the canvas - jump in 1/30ths of a second so we get 30 fps frame rate using time calculations.
+add the jumpToTime() functionality to the animation interface
+
+export.onclick = ...
+1. open file dialog and choose output name and location (use electron dialog)
+2. create .tmpMIDISuite if not existing already
+3. capture svgs in 1/30th of a second increments and stop when all notes are off screen. save as basename-00000.svg etc
+4. convert all svgs to png scaling to 1920x1080 then delete svgs
+5. ffmpeg blah blah make sure paths are correct output = specified file frame rate = 30 fps

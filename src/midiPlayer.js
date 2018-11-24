@@ -54,31 +54,6 @@ function preprocessMidiEvents(events) {
     return noteQueues;
 }
 
-// // handler for midi events. determines the type of event and generates custom
-// // events based on the event type
-// function handleMidiEvent(event, piano) {
-//     if (event.name === 'Note on') {
-//
-//         var pianoNote = midiNoteToPianoNote(event.noteNumber)
-//         var noteLength = noteQueues[pianoNote].dequeue();
-//
-//         // non-zero velocity means note on
-//         if (event.velocity != 0) {
-//             dispatchEvent(new CustomEvent('noteOn', {detail: {
-//                 pianoNote: pianoNote,
-//                 noteLength: noteLength
-//             }}));
-//             // piano.play(event.noteNumber, ac.currentTime, {gain:event.velocity/127, sustain:0});
-//         } else {
-//             // velocity of zero means note off
-//             dispatchEvent(new CustomEvent('noteOff', {detail: midiNoteToPianoNote(event.noteNumber)}));
-//         }
-//
-//     } else if (event.name === 'Note off') {
-//         dispatchEvent(new CustomEvent('noteOff', {detail: midiNoteToPianoNote(event.noteNumber)}));
-//     }
-// }
-
 // converts from midi note number to piano note number (0 to 87)
 function midiNoteToPianoNote(midiNote) {
     return midiNote - 22;
@@ -117,4 +92,4 @@ exports.initialize = function(midiFile, callback) {
 
 exports.playNote = function(pianoNote) {
     pianoSoundfont.play(pianoNoteToMidiNote(pianoNote), ac.currentTime, {gain:1, sustain:0});
-}
+};
