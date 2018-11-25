@@ -4,11 +4,12 @@ const os = require('os');
 const svgexport = require('svgexport');
 const child_process = require('child_process');
 const async = require('async');
+const glob = require('glob');
 
 const WIDTH_PATTERN = '$W$';
 const HEIGHT_PATTERN = '$H$';
 const TMP_DIR = './.tmpMIDISuite';
-const FRAME_RATE = 1;
+const FRAME_RATE = 15;
 
 var svgElement = document.getElementById('two').querySelector("svg");
 // todo set width and height to same as two-js canvas size
@@ -25,23 +26,56 @@ function captureSVGFile(fileName, dimensions, callback) {
             if (err) throw err;
             fs.close(fd, (err) => {
                 if (err) throw err;
-                console.log(fileName);
-                callback();
-                // todo move this functionality to after svg capture
-                // svgexport.cli([fileName, fileName.replace('.svg', '.png'), '1920:1080']);
+                callback(); // notify caller that new svg can be captured
             });
         });
     });
 }
 
-function convertSVGsToPNGs() {
+function convertSVGFilesToPNG(basename, callback) {
+    glob(path.join(TMP_DIR, basename + '-*.svg'), (err, filenames) => {
 
+        if (err) throw err;
+
+        // task to convert an svg to a png. callback is called when complete
+        var fileIndex = 0;
+        var svgToPNGCall = function(cb) {
+            var svgFile = this.file;
+            child_process.exec(
+                'svgexport ' + svgFile + ' ' + svgFile.replace('svg', 'png') + ' 852:480',
+                (err, stdOut, stdErr) => {
+                    if (err) throw err;
+                    // then delete the svg to minimise space taken up
+                    fs.unlink(svgFile, (err) => {
+                        if (err) throw err;
+                        cb();
+                    });
+                }
+            );
+        };
+
+
+        var tasks = [];
+        filenames.forEach((svgFile) => {
+            tasks.push(svgToPNGCall.bind({file: svgFile}));
+        });
+
+        // allow 3 processes to run at once so the system doesn't overload
+        async.parallelLimit(tasks, 3, callback);
+
+    });
 }
 
-function combinePNGImagesToMP4() {
-    //todo get the path right
+function combinePNGImagesToMP4(basename, outputPath, callback) {
+    var inputFiles = TMP_DIR + '/' + basename + '-%05d.png';
     child_process.exec(
-        'ffmpeg -y -r 1 -f image2 -s 1920x1080 -i test_files/%03d.png -vcodec libx264 -crf 15  -pix_fmt yuv420p test.mp4'
+        'ffmpeg -y -r ' + FRAME_RATE + ' -f image2 -s 852x480 -i ' + inputFiles + ' -vcodec libx264 -crf 15  -pix_fmt yuv420p ' + outputPath,
+        (err, stdOut, stdErr) => {
+            if (err) throw err;
+            console.log(stdErr);
+            console.log(stdOut);
+            callback();
+        }
     );
 }
 
@@ -99,7 +133,6 @@ exports.export = function(exportPath, dimensions, callback) {
         // then call itself again until the animation is complete
         var postCaptureCallback = function() {
             if (!midiAnimation.finished()) {
-                console.log('captured!');
                 svgCount++;
                 svgFileName = constructSVGFileName(exportName, svgCount);
                 midiAnimation.skipForwardBySeconds(incrementLength);
@@ -115,11 +148,43 @@ exports.export = function(exportPath, dimensions, callback) {
 
     };
 
-    tasks.push(createTmpFolder, captureSVGFiles);
+    var convertSVGToPNG = function(callback) {
+        console.log('converting to png');
+        convertSVGFilesToPNG(exportName, callback);
+    };
+
+    var convertPNGsToMP4 = function(callback) {
+        console.log('constructing mp4');
+        combinePNGImagesToMP4(exportName, exportPath, callback);
+    };
+
+    var deletePNGs = function(callback) {
+        console.log('cleaning up');
+
+        var rmFile = function(cb) {
+            fs.unlink(this.fileName, (err) => {
+                if (err) throw err;
+                cb();
+            });
+        };
+
+        var deleteTasks = [];
+        glob(path.join(TMP_DIR, exportName + '-*.png'), (err, filenames) => {
+            if (err) throw err;
+            filenames.forEach((file) => {
+                deleteTasks.push(rmFile.bind({fileName: file}));
+            });
+
+            async.parallelLimit(deleteTasks, 5, callback);
+        });
+    };
+
+    tasks.push(createTmpFolder, captureSVGFiles, convertSVGToPNG, convertPNGsToMP4, deletePNGs);
 
     async.series(tasks, (err, results) => {
         if (err) throw err;
         console.log('finished exporting');
     });
+
 
 };
