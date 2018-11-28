@@ -1,7 +1,5 @@
 // module to export the animation to an mp4 file
 const fs = require('fs');
-const os = require('os');
-const svgexport = require('svgexport');
 const child_process = require('child_process');
 const async = require('async');
 const glob = require('glob');
@@ -9,7 +7,7 @@ const glob = require('glob');
 const WIDTH_PATTERN = '$W$';
 const HEIGHT_PATTERN = '$H$';
 const TMP_DIR = './.tmpMIDISuite';
-const FRAME_RATE = 15;
+const FRAME_RATE = 30;
 
 var svgElement = document.getElementById('two').querySelector("svg");
 // todo set width and height to same as two-js canvas size
@@ -42,7 +40,7 @@ function convertSVGFilesToPNG(basename, callback) {
         var svgToPNGCall = function(cb) {
             var svgFile = this.file;
             child_process.exec(
-                'svgexport ' + svgFile + ' ' + svgFile.replace('svg', 'png') + ' 852:480',
+                'svgexport ' + svgFile + ' ' + svgFile.replace('svg', 'png') + ' 1280:720',
                 (err, stdOut, stdErr) => {
                     if (err) throw err;
                     // then delete the svg to minimise space taken up
@@ -69,7 +67,7 @@ function convertSVGFilesToPNG(basename, callback) {
 function combinePNGImagesToMP4(basename, outputPath, callback) {
     var inputFiles = TMP_DIR + '/' + basename + '-%05d.png';
     child_process.exec(
-        'ffmpeg -y -r ' + FRAME_RATE + ' -f image2 -s 852x480 -i ' + inputFiles + ' -vcodec libx264 -crf 15  -pix_fmt yuv420p ' + outputPath,
+        'ffmpeg -y -r ' + FRAME_RATE + ' -f image2 -s 1280x720 -i ' + inputFiles + ' -vcodec libx264 -crf 15  -pix_fmt yuv420p ' + outputPath,
         (err, stdOut, stdErr) => {
             if (err) throw err;
             console.log(stdErr);
@@ -97,6 +95,49 @@ exports = module.exports = {};
 // takes the pathname to export to, the dimensions of the canvas (so the viewport is correct),
 // and a callback
 exports.export = function(exportPath, dimensions, callback) {
+
+    /////////////////////////////
+    // New exporting method xx //
+    /////////////////////////////
+
+    var canvas = document.createElement('canvas');
+    var loader = new Image;
+    var ctx = canvas.getContext('2d');
+    var svgAsXML = (new XMLSerializer).serializeToString(svgElement);
+    var link = document.createElement('a');
+
+    link.download = 'test_download.png';
+
+    loader.width = canvas.width = 1920;
+    loader.height = canvas.height = 1080;
+    loader.src = 'data:image/svg+xml,' + encodeURIComponent(svgAsXML);
+
+    loader.onload = () => {
+        ctx.drawImage( loader, 0, 0, 1920, 1080 );
+
+        // extract the binary data from the canvas (a "blob")
+        canvas.toBlob((blob) => {
+            console.log(blob);
+            var reader = new FileReader();
+            reader.readAsArrayBuffer(blob);
+            reader.addEventListener("loadend", function() {
+                var buffer = Buffer.from(reader.result);
+                console.log(buffer);
+                fs.open('downloaded_img.png', 'w', (err, fd) => {
+                    if (err) throw err;
+                    fs.write(fd, buffer, (err) => {
+                        if (err) throw err;
+                        fs.close(fd, (err) => {
+                            if (err) throw err;
+                        });
+                    });
+                });
+            });
+        });
+       
+    };
+
+    //////////////////
 
     // get name of export path minus the file extension and directory location
     var exportName = path.basename(exportPath, '.mp4');
@@ -179,7 +220,7 @@ exports.export = function(exportPath, dimensions, callback) {
         });
     };
 
-    tasks.push(createTmpFolder, captureSVGFiles, convertSVGToPNG, convertPNGsToMP4, deletePNGs);
+    //tasks.push(createTmpFolder, captureSVGFiles, convertSVGToPNG, convertPNGsToMP4, deletePNGs);
 
     async.series(tasks, (err, results) => {
         if (err) throw err;
