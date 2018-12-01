@@ -30,7 +30,10 @@ exportButton.addEventListener('click', function(event) {
     });
     if (!exportPath) return;
 
-    exporter.export(exportPath, midiAnimation.dimensions);
+    exportButton.disabled = true;
+    exporter.export(exportPath,() => {
+        exportButton.disabled = false;
+    });
     //exporter.export(midiAnimation.dimensions);
 });
 

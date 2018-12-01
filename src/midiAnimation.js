@@ -174,6 +174,7 @@ function drawEntireMidiFile() {
         allNotes.forEach((note) => {
             two.remove(note.shape);
         });
+        allNotes.clear();
 
         activeNoteQueues.forEach((noteQueue) => {
             noteQueue.clear();
