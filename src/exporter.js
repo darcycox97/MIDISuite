@@ -86,13 +86,41 @@ function writePNGToDisk(callback) {
             if (err) throw err;
             fs.close(fd, (err) => {
                 if (err) throw err;
-                // deference object so it is garbage collected
                 this.fileName = null;
                 this.data = null;
                 callback();
             });
         });
     });
+}
+
+function deletePNGs(callback) {
+    var rmFile = function (cb) {
+        fs.unlink(this.fileName, (err) => {
+            if (err) throw err;
+            cb();
+        });
+    };
+
+    var deleteTasks = [];
+    glob(path.join(TMP_DIR, exportName + '-*.png'), (err, filenames) => {
+        if (err) throw err;
+        filenames.forEach((file) => {
+            deleteTasks.push(rmFile.bind({ fileName: file }));
+        });
+
+        async.parallelLimit(deleteTasks, 5, callback);
+    });
+}
+
+function constructTmpVideoName(basename, n) {
+    // add padding zeros so number is always 5 digits
+    if (n < 99999) {
+        n = ('0000' + n).slice(-5);
+    }
+
+    var fileName = path.join(TMP_DIR, basename + '-' + n + '.mp4');
+    return fileName;
 }
 
 
@@ -138,6 +166,11 @@ exports.export = function (exportPath, callback) {
 
         // whether or not we are writing pngs to disk at the moment
         var isWriting = false;
+
+        // whether or not we should compress the images into a tmp video to save space
+        var makeTmpVideo = false;
+        var numTmpVideos = 0;
+        var tmpVids = [];
     
         // define behaviour when the current frame has been captured.
         // it should update the filename, count, and animation state
@@ -151,28 +184,61 @@ exports.export = function (exportPath, callback) {
             // once we have queued up a decent amount of pngs, write them out to disk
             // allowing 5 writes simultaneously. Only do this is we are not already
             // writing
-            if (pngWriteQueue.size() >= 10 && !isWriting) {
+            if ((pngWriteQueue.size() >= 10 && !isWriting) || (midiAnimation.finished() && pngWriteQueue.size() != 0)) {
                 isWriting = true;
                 var tasks = [];
                 while (!pngWriteQueue.isEmpty()) {
                     tasks.push(writePNGToDisk.bind(pngWriteQueue.dequeue()));
                 }
-                async.parallelLimit(tasks, 5, () => {
+                async.parallelLimit(tasks, 10, () => {
                     // derefence the tasks so they are garbage collected (hopefully)
                     tasks = null;
-                    isWriting = false;
+
+                    // check to see if we should combine pngs into a tmp video then delete them or not
+                    if (makeTmpVideo) {
+                        makeTmpVideo = false;
+                        var vidName = constructTmpVideoName(exportName, numTmpVideos);
+                        tmpVids.push(vidName);
+                        numTmpVideos++;
+                        console.log('making temp video');
+                        combinePNGImagesToMP4(exportName, vidName, () => {
+                            deletePNGs(() => {
+                                isWriting = false;
+                                console.log('deleted all pngs');
+
+                                // start capturing frames again
+                                frameCount++;
+                                pngFileName = constructPNGFileName(exportName, frameCount);
+                                midiAnimation.skipForwardBySeconds(incrementLength);
+                                getPNGBuffer(postCaptureCallback);
+                            });
+                        });
+                    } else {
+                        isWriting = false;
+                    }
                 });
+
+                // if a tmp video is about to be made we shouldn't capture anymore frames until it is done
+                // so we should return from the postCaptureCallback function.
+                if (makeTmpVideo) {
+                    return;
+                }
             }
 
             if (!midiAnimation.finished()) {
+
                 frameCount++;
+
+                // we should create a video whenever we end up with 1000 ish pngs on disk
+                if (frameCount % 100 == 0) {
+                    makeTmpVideo = true;
+                }
                 pngFileName = constructPNGFileName(exportName, frameCount);
                 midiAnimation.skipForwardBySeconds(incrementLength);
                 getPNGBuffer(postCaptureCallback);
             } else {
-                // this is the end condition
-                // write out any remaining png frames to disk and construct an mp4
                 midiAnimation.setExporting(false);
+                pngWriteQueue = null; // deference the queue so it is garbage collected
                 callback();
             }
         };
