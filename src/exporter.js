@@ -18,6 +18,87 @@ loader.width = canvas.width = 1920;
 loader.height = canvas.height = 1080;
 
 
+// TODO: 
+// - Migrate png capture functions to new module ?? or ffmpeg
+// - captureAllFrames should periodically combine the tmp videos then delete the pngs and reset framecount
+// - cleanup function (delete any pngs or tmp videos remaining, then delete tmp folder)
+
+
+exports = module.exports = {};
+
+// exports the midi animation to an mp4 file
+// takes the pathname to export to and a callback 
+// which is called when exporting is finished
+exports.export = function (exportPath, callback) {
+
+    // get name of export path minus the file extension and directory location
+    var exportBasename = path.basename(exportPath, '.mp4');
+
+    var tasks = [];
+
+    var captureAllFrames = function (cb) {
+        console.log('capturing all frames');
+
+        midiAnimation.setExporting(true);
+
+        var frameCount = 0;
+        var incrementLength = 1 / FRAME_RATE;
+        var pngFileName = constructNumberedFileName(exportBasename, frameCount, 'png');
+
+        // wrap the following block of code so that the captureSingleFrame can be called again
+        // after its promise is resolved (i.e so we don't have to register the callback over and over)
+        var wrapper = function() {
+            captureSingleFrame(pngFileName)
+            .then(() => {
+                if (!midiAnimation.finished()) {
+                    frameCount++;
+                    midiAnimation.skipForwardBySeconds(incrementLength);
+                    pngFileName = constructNumberedFileName(exportBasename, frameCount, 'png');
+                    wrapper();
+                } else {
+                    midiAnimation.setExporting(false);
+                    cb();
+                }
+            });
+        }
+
+        wrapper();
+    }
+
+    var combineTmpVideos = function(cb) {
+        cb();
+    };
+
+    tasks.push(createTmpFolder, captureAllFrames, combineTmpVideos);
+    async.series(tasks, (err, results) => {
+        if (err) throw err;
+        // deference so things can be garbage collected
+        tasks = null;
+        console.log('finished exporting');
+        callback();
+    });
+
+    // ideal way this func will look
+    // createTmpFolder()
+    // .then(captureAllFrames)
+    // .then(combineTmpVideos)
+    // .then(cleanup);
+};
+
+////////////////////// FUNCTIONS /////////////////////////////////////
+
+// captures a single frame for our video - the image will match what is currently on the canvas. 
+function captureSingleFrame(pngFileName) {
+    return new Promise((resolve, reject) => {
+        getPNGData()
+        .then((pngData) => {
+            // promise is resolved when png is written to disk
+            writePNGToDisk(pngFileName, pngData)})
+        .then(resolve);
+    });
+}
+
+// combines all pngs numbered from 00000 upwards into an mp4 video, specified by outputPath.
 function combinePNGImagesToMP4(basename, outputPath, callback) {
     var inputFiles = TMP_DIR + '/' + basename + '-%05d.png';
     child_process.exec(
@@ -31,70 +112,36 @@ function combinePNGImagesToMP4(basename, outputPath, callback) {
     );
 }
 
-// returns the path to save the nth png capture of the specified export basename
-function constructPNGFileName(basename, n) {
+// takes a filename, a number, and a file extension. Constructs the numbered filename
+// which is {basename}-{ddddd}.{ext}
+function constructNumberedFileName(basename, n, ext) {
     // add padding zeros so number is always 5 digits
     if (n < 99999) {
         n = ('0000' + n).slice(-5);
     }
 
-    var fileName = path.join(TMP_DIR, basename + '-' + n + '.png');
-    return fileName;
+    var fileName = path.join(TMP_DIR, basename + '-' + n + '.' + ext);
+    return fileName;    
 }
 
-// takes the current state of the svg element and produces a data uri representing 
-// an svg image.
-function getSVGAsDataURL() {
-    var svgAsXML = (new XMLSerializer).serializeToString(svgElement);
-    return 'data:image/svg+xml,' + encodeURIComponent(svgAsXML);
-}
-
-// captures the current state of the animation and writes it to a png
-function getPNGBuffer(callback) {
-
-    // called whenever the image src has been set and has finished loading
-    loader.onload = () => {
-        // add the loaded image to the canvas
-        ctx.drawImage(loader, 0, 0, 1920, 1080);
-
-        // extract the binary data from the canvas (a "blob")
-        canvas.toBlob((blob) => {
-            // set event listener for when the data is ready then read the blob as
-            // a buffer so we can easily write it to a png file
-            var reader = new FileReader();
-
-            reader.onloadend = () => {
-                var buffer = Buffer.from(reader.result);
-                callback(buffer);
-            };
-
-            reader.readAsArrayBuffer(blob);
-        });
-    };
-
-    loader.src = getSVGAsDataURL();
-}
-
-// used as a task to write a png file to disk
-// 'this' should be bound to an object with properties:
-// data: the buffer containing the png data
-// fileName: the filename to write to
-function writePNGToDisk(callback) {
-    fs.open(this.fileName, 'w', (err, fd) => {
-        if (err) throw err;
-        fs.write(fd, this.data, (err) => {
-            if (err) throw err;
-            fs.close(fd, (err) => {
+// creates a temporary folder to use as a workspace while we are exporting.
+function createTmpFolder(callback) {
+    console.log('Creating temp folder');
+    fs.access(TMP_DIR, (err) => {
+        if (err) {
+            // tmp folder does not exist, create it.
+            fs.mkdir(TMP_DIR, (err) => {
                 if (err) throw err;
-                this.fileName = null;
-                this.data = null;
                 callback();
             });
-        });
+        } else {
+            callback();
+        }
     });
 }
 
-function deletePNGs(callback) {
+function deletePNGs(basename, callback) {
+    console.log('deleting pngs');
     var rmFile = function (cb) {
         fs.unlink(this.fileName, (err) => {
             if (err) throw err;
@@ -103,7 +150,7 @@ function deletePNGs(callback) {
     };
 
     var deleteTasks = [];
-    glob(path.join(TMP_DIR, exportName + '-*.png'), (err, filenames) => {
+    glob(path.join(TMP_DIR, basename + '-*.png'), (err, filenames) => {
         if (err) throw err;
         filenames.forEach((file) => {
             deleteTasks.push(rmFile.bind({ fileName: file }));
@@ -113,167 +160,163 @@ function deletePNGs(callback) {
     });
 }
 
-function constructTmpVideoName(basename, n) {
-    // add padding zeros so number is always 5 digits
-    if (n < 99999) {
-        n = ('0000' + n).slice(-5);
-    }
+// captures the current state of the animation and returns a promise which when resolved
+// passes an array buffer containing the captured PNG data.
+function getPNGData() {
+    return new Promise((resolve, reject) => {
+        // called whenever the image src has been set and has finished loading
+        loader.onload = () => {
+            // add the loaded image to the canvas
+            ctx.drawImage(loader, 0, 0, 1920, 1080);
 
-    var fileName = path.join(TMP_DIR, basename + '-' + n + '.mp4');
-    return fileName;
+            // extract the binary data from the canvas (a "blob")
+            canvas.toBlob((blob) => {
+                // set event listener for when the data is ready then read the blob as
+                // a buffer so we can easily write it to a png file
+                var reader = new FileReader();
+                reader.onloadend = () => {
+                    var buffer = Buffer.from(reader.result);
+                    resolve(buffer);
+                };
+
+                reader.readAsArrayBuffer(blob);
+            });
+        };
+
+        loader.src = getSVGAsDataURL();
+    });
+}
+
+// takes the current state of the svg element and produces a data uri representing 
+// an svg image.
+function getSVGAsDataURL() {
+    var svgAsXML = (new XMLSerializer).serializeToString(svgElement);
+    return 'data:image/svg+xml,' + encodeURIComponent(svgAsXML);
+}
+
+// write the contents of the provided buffer to the specified file
+// returns a promise
+function writePNGToDisk(fileName, pngData) {
+    return new Promise((resolve, reject) => {
+        fs.open(fileName, 'w', (err, fd) => {
+            if (err) throw err;
+
+            // writing synchronously appears to be better on memory usage
+            fs.writeSync(fd, pngData);
+            pngData = null;
+            fs.close(fd, (err) => {
+                if (err) throw err;
+                resolve();
+            });
+        });
+    });
 }
 
 
-exports = module.exports = {};
+    // // take snapshots of the animation at 1/FRAME_RATE second intervals.
+    // var captureAllFrames = function (callback) {
 
-// exports the midi animation to an mp4 file
-// takes the pathname to export to and a callback 
-// which is called when exporting is finished
-exports.export = function (exportPath, callback) {
+    //     console.log('capturing all frames');
 
-    // get name of export path minus the file extension and directory location
-    var exportName = path.basename(exportPath, '.mp4');
+    //     // we need a flag to represent when to stop exporting, because asynchronous callbacks
+    //     // sometimes think the animation is still going because it has transitioned from finished to 
+    //     // not finished (it has been reset when exporting was set to false) without the callback seeing
+    //     // that it is finished
+    //     var finished = false;
 
-    var tasks = [];
+    //     var pngWriteQueue = buckets.Queue();
 
-    // check that the tmp folder exists, if not create it
-    var createTmpFolder = function (callback) {
-        console.log('running create tmp folder');
-        fs.access(TMP_DIR, (err) => {
-            if (err) {
-                fs.mkdir(TMP_DIR, (err) => {
-                    if (err) throw err;
-                    callback();
-                });
-            } else {
-                callback();
-            }
-        });
-    };
+    //     midiAnimation.setExporting(true);
 
-    // take snapshots of the animation at 1/FRAME_RATE second intervals.
-    var captureAllFrames = function (callback) {
+    //     var frameCount = 0;
+    //     var incrementLength = 1 / FRAME_RATE;
+    //     var pngFileName = constructNumberedFileName(exportName, frameCount, 'png');
 
-        console.log('capturing all frames');
+    //     // whether or not we are writing pngs to disk at the moment
+    //     var isWriting = false;
 
-        var pngWriteQueue = buckets.Queue();
+    //     // whether or not we should compress the images into a tmp video to save space
+    //     var makeTmpVideo = false;
+    //     var numTmpVideos = 0;
+    //     var tmpVids = [];
 
-        midiAnimation.setExporting(true);
+    //     // define behaviour when the current frame has been captured.
+    //     // it should update the filename, count, and animation state
+    //     // then capture again until the animation is complete.
+    //     // also add to the PNG write queue which will periodically write to 
+    //     // the disk
+    //     var postCaptureCallback = function (capturedPNGBuffer) {
 
-        var frameCount = 0;
-        var incrementLength = 1 / FRAME_RATE;
-        var pngFileName = constructPNGFileName(exportName, frameCount);
+    //         if (midiAnimation.finished()) {
+    //             finished = true;
+    //         }
 
-        // whether or not we are writing pngs to disk at the moment
-        var isWriting = false;
+    //         pngWriteQueue.enqueue({ data: capturedPNGBuffer, fileName: pngFileName });
 
-        // whether or not we should compress the images into a tmp video to save space
-        var makeTmpVideo = false;
-        var numTmpVideos = 0;
-        var tmpVids = [];
-    
-        // define behaviour when the current frame has been captured.
-        // it should update the filename, count, and animation state
-        // then capture again until the animation is complete.
-        // also add to the PNG write queue which will periodically write to 
-        // the disk
-        var postCaptureCallback = function (capturedPNGBuffer) {
+    //         // once we have queued up a decent amount of pngs, write them out to disk
+    //         // allowing 5 writes simultaneously. Only do this is we are not already
+    //         // writing
+    //         if ((pngWriteQueue.size() >= 10 && !isWriting) || (finished && pngWriteQueue.size() != 0)) {
+    //             isWriting = true;
+    //             var tasks = [];
+    //             while (!pngWriteQueue.isEmpty()) {
+    //                 tasks.push(writePNGToDisk.bind(pngWriteQueue.dequeue()));
+    //             }
+    //             async.parallelLimit(tasks, 10, () => {
+    //                 // derefence the tasks so they are garbage collected (hopefully)
+    //                 tasks = null;
 
-            pngWriteQueue.enqueue({ data: capturedPNGBuffer, fileName: pngFileName });
+    //                 // check to see if we should combine pngs into a tmp video then delete them or not
+    //                 if (makeTmpVideo) {
+    //                     makeTmpVideo = false;
+    //                     var vidName = constructNumberedFileName(exportName, numTmpVideos, 'mp4');
+    //                     tmpVids.push(vidName);
+    //                     numTmpVideos++;
+    //                     console.log('making temp video');
+    //                     combinePNGImagesToMP4(exportName, vidName, () => {
+    //                         deletePNGs(exportName, () => {
+    //                             isWriting = false;
+    //                             console.log('deleted all pngs');
 
-            // once we have queued up a decent amount of pngs, write them out to disk
-            // allowing 5 writes simultaneously. Only do this is we are not already
-            // writing
-            if ((pngWriteQueue.size() >= 10 && !isWriting) || (midiAnimation.finished() && pngWriteQueue.size() != 0)) {
-                isWriting = true;
-                var tasks = [];
-                while (!pngWriteQueue.isEmpty()) {
-                    tasks.push(writePNGToDisk.bind(pngWriteQueue.dequeue()));
-                }
-                async.parallelLimit(tasks, 10, () => {
-                    // derefence the tasks so they are garbage collected (hopefully)
-                    tasks = null;
+    //                             if (!finished) {
+    //                                 // start capturing frames again if the animation hasn't finished
+    //                                 frameCount = 0;
+    //                                 pngFileName = constructNumberedFileName(exportName, frameCount, 'png');
+    //                                 midiAnimation.skipForwardBySeconds(incrementLength);
+    //                                 getPNGBuffer(postCaptureCallback);
+    //                             }
+    //                         });
+    //                     });
+    //                 } else {
+    //                     isWriting = false;
+    //                 }
+    //             });
+    //              // if a tmp video is about to be made we shouldn't capture anymore frames until it is done
+    //             // so we should return from the postCaptureCallback function.
+    //             if (makeTmpVideo) {
+    //                 return;
+    //             }
+    //         }
 
-                    // check to see if we should combine pngs into a tmp video then delete them or not
-                    if (makeTmpVideo) {
-                        makeTmpVideo = false;
-                        var vidName = constructTmpVideoName(exportName, numTmpVideos);
-                        tmpVids.push(vidName);
-                        numTmpVideos++;
-                        console.log('making temp video');
-                        combinePNGImagesToMP4(exportName, vidName, () => {
-                            deletePNGs(() => {
-                                isWriting = false;
-                                console.log('deleted all pngs');
+    //         if (!finished) {
 
-                                // start capturing frames again
-                                frameCount++;
-                                pngFileName = constructPNGFileName(exportName, frameCount);
-                                midiAnimation.skipForwardBySeconds(incrementLength);
-                                getPNGBuffer(postCaptureCallback);
-                            });
-                        });
-                    } else {
-                        isWriting = false;
-                    }
-                });
+    //             frameCount++;
 
-                // if a tmp video is about to be made we shouldn't capture anymore frames until it is done
-                // so we should return from the postCaptureCallback function.
-                if (makeTmpVideo) {
-                    return;
-                }
-            }
+    //             // we should create a video whenever we end up with 500 pngs on disk
+    //             // to avoid too much disk space being taken up
+    //             if (frameCount == 50) {
+    //                 makeTmpVideo = true;
+    //             }
+    //             pngFileName = constructNumberedFileName(exportName, frameCount, 'png');
+    //             midiAnimation.skipForwardBySeconds(incrementLength);
+    //             getPNGBuffer(postCaptureCallback);
+    //         } else {
+    //             // this will reset the animation to its start state
+    //             midiAnimation.setExporting(false);
+    //             callback();
+    //         }
+    //     };
 
-            if (!midiAnimation.finished()) {
+    //     getPNGBuffer(postCaptureCallback);
 
-                frameCount++;
-
-                // we should create a video whenever we end up with 1000 ish pngs on disk
-                if (frameCount % 100 == 0) {
-                    makeTmpVideo = true;
-                }
-                pngFileName = constructPNGFileName(exportName, frameCount);
-                midiAnimation.skipForwardBySeconds(incrementLength);
-                getPNGBuffer(postCaptureCallback);
-            } else {
-                midiAnimation.setExporting(false);
-                pngWriteQueue = null; // deference the queue so it is garbage collected
-                callback();
-            }
-        };
-
-        getPNGBuffer(postCaptureCallback);
-
-    };
-
-    tasks.push(createTmpFolder, captureAllFrames);
-    async.series(tasks, (err, results) => {
-        if (err) throw err;
-        // deference so things can be garbage collected
-        tasks = null;
-        console.log('finished exporting');
-        callback();
-    });
-
-    var deletePNGs = function (callback) {
-        console.log('cleaning up');
-
-        var rmFile = function (cb) {
-            fs.unlink(this.fileName, (err) => {
-                if (err) throw err;
-                cb();
-            });
-        };
-
-        var deleteTasks = [];
-        glob(path.join(TMP_DIR, exportName + '-*.png'), (err, filenames) => {
-            if (err) throw err;
-            filenames.forEach((file) => {
-                deleteTasks.push(rmFile.bind({ fileName: file }));
-            });
-
-            async.parallelLimit(deleteTasks, 5, callback);
-        });
-    };
-};
+    // };
