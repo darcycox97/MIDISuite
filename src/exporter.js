@@ -1,5 +1,6 @@
 // module to export the animation to an mp4 file
 const fs = require('fs');
+const os = require('os');
 const child_process = require('child_process');
 const async = require('async');
 const glob = require('glob');
@@ -27,69 +28,96 @@ loader.height = canvas.height = 1080;
 exports = module.exports = {};
 
 // exports the midi animation to an mp4 file
-// takes the pathname to export to and a callback 
-// which is called when exporting is finished
-exports.export = function (exportPath, callback) {
+// takes the pathname to export to.
+// returns a Promise which resolves once exporting is complete
+exports.export = function (exportPath) {
+    return new Promise((resolve) => {
+        // get name of export path minus the file extension and directory location
+        var exportBasename = path.basename(exportPath, '.mp4');
+        console.log('creating tmp folder');
+        createTmpFolder()
+        .then(() => {
+            console.log('capturing all frames');
+            return captureAllFrames(exportBasename);
+        })
+        .then((tmpVideoNames) => {
+            console.log('combining videos');
+            return combineTmpVideos(tmpVideoNames, exportPath);
+        })
+        .then(() => {
+            console.log('cleaning up');
+            return cleanup();
+        })
+        .then(() => {
+            console.log('finished exporting');
+            resolve();
+        });
+    });
+};
 
-    // get name of export path minus the file extension and directory location
-    var exportBasename = path.basename(exportPath, '.mp4');
+////////////////////// FUNCTIONS /////////////////////////////////////
 
-    var tasks = [];
-
-    var captureAllFrames = function (cb) {
-        console.log('capturing all frames');
+// captures all frames of the midi animation and saves them as pngs.
+// temp videos are made once a threshold of pngs are reached to save disk space
+// (since ffmpeg compresses the data very well).
+// takes the basename of the export file so we know what to name the temp files. 
+// returns a promise that resolves once all frames have been written to disk.
+// the promise returns all the names of the temporary videos so we can combine them
+function captureAllFrames(basename) {
+    return new Promise((resolve) => {
+        var frameCount = 0;
+        var tmpVideoCount = 0;
+        var tmpVideoNames = [];
+        var incrementLength = 1 / FRAME_RATE;
+        var pngFileName = constructNumberedFileName(basename, frameCount, 'png');
 
         midiAnimation.setExporting(true);
 
-        var frameCount = 0;
-        var incrementLength = 1 / FRAME_RATE;
-        var pngFileName = constructNumberedFileName(exportBasename, frameCount, 'png');
-
         // wrap the following block of code so that the captureSingleFrame can be called again
         // after its promise is resolved (i.e so we don't have to register the callback over and over)
-        var wrapper = function() {
+        var wrapper = function () {
             captureSingleFrame(pngFileName)
             .then(() => {
                 if (!midiAnimation.finished()) {
-                    frameCount++;
-                    midiAnimation.skipForwardBySeconds(incrementLength);
-                    pngFileName = constructNumberedFileName(exportBasename, frameCount, 'png');
-                    wrapper();
+                    if (frameCount >= 50) {
+                        // once we hit the max number of pngs we want on disk,
+                        // create a temp mp4 to save space
+                        frameCount = 0;
+                        pngFileName = constructNumberedFileName(basename, frameCount, 'png');
+                        midiAnimation.skipForwardBySeconds(incrementLength);
+
+                        var tmpVideoName = constructNumberedFileName(basename, tmpVideoCount, 'mp4');
+                        tmpVideoNames.push(tmpVideoName);
+                        tmpVideoCount++;
+                        combinePNGImagesToMP4(basename, tmpVideoName)
+                            .then(deletePNGsInTmpFolder)
+                            .then(wrapper);
+                    } else {
+                        frameCount++;
+                        midiAnimation.skipForwardBySeconds(incrementLength);
+                        pngFileName = constructNumberedFileName(basename, frameCount, 'png');
+                        wrapper();
+                    }
                 } else {
                     midiAnimation.setExporting(false);
-                    cb();
+
+                    // all frames are captured. we need to combine any excess pngs into a temp mp4
+                    var tmpVideoName = constructNumberedFileName(basename, tmpVideoCount, 'mp4');
+                    tmpVideoNames.push(tmpVideoName);
+                    combinePNGImagesToMP4(basename, tmpVideoName)
+                        .then(deletePNGsInTmpFolder)
+                        .then(() => resolve(tmpVideoNames));
                 }
             });
         }
 
         wrapper();
-    }
-
-    var combineTmpVideos = function(cb) {
-        cb();
-    };
-
-    tasks.push(createTmpFolder, captureAllFrames, combineTmpVideos);
-    async.series(tasks, (err, results) => {
-        if (err) throw err;
-        // deference so things can be garbage collected
-        tasks = null;
-        console.log('finished exporting');
-        callback();
     });
-
-    // ideal way this func will look
-    // createTmpFolder()
-    // .then(captureAllFrames)
-    // .then(combineTmpVideos)
-    // .then(cleanup);
-};
-
-////////////////////// FUNCTIONS /////////////////////////////////////
+}
 
 // captures a single frame for our video - the image will match what is currently on the canvas. 
 function captureSingleFrame(pngFileName) {
-    return new Promise((resolve, reject) => {
+    return new Promise((resolve) => {
         getPNGData()
         .then((pngData) => {
             // promise is resolved when png is written to disk
@@ -98,18 +126,55 @@ function captureSingleFrame(pngFileName) {
     });
 }
 
-// combines all pngs numbered from 00000 upwards into an mp4 video, specified by outputPath.
-function combinePNGImagesToMP4(basename, outputPath, callback) {
-    var inputFiles = TMP_DIR + '/' + basename + '-%05d.png';
-    child_process.exec(
-        'ffmpeg -y -r ' + FRAME_RATE + ' -f image2 -s 1920x1080 -i ' + inputFiles + ' -vcodec libx264 -crf 15  -pix_fmt yuv420p ' + outputPath,
-        (err, stdOut, stdErr) => {
-            if (err) throw err;
-            console.log(stdErr);
-            console.log(stdOut);
-            callback();
-        }
-    );
+// to be called after all exporting is complete.
+// delete the temporary folder and all its contents
+function cleanup() {
+    return new Promise((resolve) => {
+        deleteFilesInTmpFolder('*')
+        .then(() => {
+            fs.rmdirSync(TMP_DIR);
+            resolve();
+        });
+    });
+}
+
+// combines all pngs numbered from 00000 upwards into an mp4 video whose
+// location is specified by outputPath.
+function combinePNGImagesToMP4(basename, outputPath) {
+    return new Promise((resolve) => {
+        var inputFiles = TMP_DIR + '/' + basename + '-%05d.png';
+        child_process.exec(
+            'ffmpeg -y -r ' + FRAME_RATE + ' -f image2 -s 1920x1080 -i ' + inputFiles + ' -vcodec libx264 -crf 15  -pix_fmt yuv420p ' + outputPath,
+            (err, stdOut, stdErr) => {
+                if (err) throw err;
+                resolve();
+            }
+        );
+    });
+}
+
+// combines the videos specified in the tmpVideoNames array and writes the
+// result into the location specified by exportPath.
+function combineTmpVideos(tmpVideoNames, exportPath) {
+    return new Promise((resolve) => {
+        var namesFile = path.join(TMP_DIR, 'tmpVideos.txt');
+
+        var fd = fs.openSync(namesFile, 'w');
+        tmpVideoNames.forEach((videoName) => {
+            fs.writeSync(fd, 'file ' + videoName.replace('\\', '/') + os.EOL);
+        });
+        fs.closeSync(fd);
+
+        // this ffmpeg call looks in the specified file and combines each video specified by
+        // new lines in the file
+        child_process.exec(
+            'ffmpeg -f concat -safe 0 -i '+ namesFile + ' -c copy ' + exportPath,
+            (err) => {
+                if (err) throw err;
+                resolve();
+            }
+        );
+    });
 }
 
 // takes a filename, a number, and a file extension. Constructs the numbered filename
@@ -125,45 +190,62 @@ function constructNumberedFileName(basename, n, ext) {
 }
 
 // creates a temporary folder to use as a workspace while we are exporting.
-function createTmpFolder(callback) {
-    console.log('Creating temp folder');
-    fs.access(TMP_DIR, (err) => {
-        if (err) {
-            // tmp folder does not exist, create it.
-            fs.mkdir(TMP_DIR, (err) => {
-                if (err) throw err;
-                callback();
-            });
-        } else {
-            callback();
-        }
+function createTmpFolder(resolve) {
+    return new Promise((resolve) => {
+        fs.access(TMP_DIR, (err) => {
+            if (err) {
+                // tmp folder does not exist, create it.
+                fs.mkdir(TMP_DIR, (err) => {
+                    if (err) throw err;
+                    resolve();
+                });
+            } else {
+                resolve();
+            }
+        });
     });
 }
 
-function deletePNGs(basename, callback) {
-    console.log('deleting pngs');
-    var rmFile = function (cb) {
-        fs.unlink(this.fileName, (err) => {
+// applies a glob search inside the tmp folder using searchPattern and deletes
+// all files matching this
+function deleteFilesInTmpFolder(searchPattern) {
+    return new Promise((resolve) => {
+        glob(path.join(TMP_DIR, searchPattern), (err, filenames) => {
             if (err) throw err;
-            cb();
-        });
-    };
+            var promises = [];
+            filenames.forEach((filename) => {
+                promises.push(
+                    new Promise((res, rej) => {
+                        fs.unlink(filename, (err) => {
+                            if (err) throw err;
+                            res();
+                        });
+                    })
+                );
+            });
 
-    var deleteTasks = [];
-    glob(path.join(TMP_DIR, basename + '-*.png'), (err, filenames) => {
-        if (err) throw err;
-        filenames.forEach((file) => {
-            deleteTasks.push(rmFile.bind({ fileName: file }));
+            // wait for all deletions to finish before resolving the promise
+            Promise.all(promises).then(resolve);
         });
-
-        async.parallelLimit(deleteTasks, 5, callback);
     });
+}
+
+// deletes all temporary mp4s in the tmp folder with the
+// specified basename. Returns a promise.
+function deleteMP4sInTmpFolder() {
+    return deleteFilesInTmpFolder('*.mp4');
+}
+
+// deletes all temporary pngs in the tmp folder with the
+// specified basename. Returns a promise.
+function deletePNGsInTmpFolder() {
+    return deleteFilesInTmpFolder('*.png');
 }
 
 // captures the current state of the animation and returns a promise which when resolved
 // passes an array buffer containing the captured PNG data.
 function getPNGData() {
-    return new Promise((resolve, reject) => {
+    return new Promise((resolve) => {
         // called whenever the image src has been set and has finished loading
         loader.onload = () => {
             // add the loaded image to the canvas
@@ -197,7 +279,7 @@ function getSVGAsDataURL() {
 // write the contents of the provided buffer to the specified file
 // returns a promise
 function writePNGToDisk(fileName, pngData) {
-    return new Promise((resolve, reject) => {
+    return new Promise((resolve) => {
         fs.open(fileName, 'w', (err, fd) => {
             if (err) throw err;
 
@@ -211,112 +293,3 @@ function writePNGToDisk(fileName, pngData) {
         });
     });
 }
-
-
-    // // take snapshots of the animation at 1/FRAME_RATE second intervals.
-    // var captureAllFrames = function (callback) {
-
-    //     console.log('capturing all frames');
-
-    //     // we need a flag to represent when to stop exporting, because asynchronous callbacks
-    //     // sometimes think the animation is still going because it has transitioned from finished to 
-    //     // not finished (it has been reset when exporting was set to false) without the callback seeing
-    //     // that it is finished
-    //     var finished = false;
-
-    //     var pngWriteQueue = buckets.Queue();
-
-    //     midiAnimation.setExporting(true);
-
-    //     var frameCount = 0;
-    //     var incrementLength = 1 / FRAME_RATE;
-    //     var pngFileName = constructNumberedFileName(exportName, frameCount, 'png');
-
-    //     // whether or not we are writing pngs to disk at the moment
-    //     var isWriting = false;
-
-    //     // whether or not we should compress the images into a tmp video to save space
-    //     var makeTmpVideo = false;
-    //     var numTmpVideos = 0;
-    //     var tmpVids = [];
-
-    //     // define behaviour when the current frame has been captured.
-    //     // it should update the filename, count, and animation state
-    //     // then capture again until the animation is complete.
-    //     // also add to the PNG write queue which will periodically write to 
-    //     // the disk
-    //     var postCaptureCallback = function (capturedPNGBuffer) {
-
-    //         if (midiAnimation.finished()) {
-    //             finished = true;
-    //         }
-
-    //         pngWriteQueue.enqueue({ data: capturedPNGBuffer, fileName: pngFileName });
-
-    //         // once we have queued up a decent amount of pngs, write them out to disk
-    //         // allowing 5 writes simultaneously. Only do this is we are not already
-    //         // writing
-    //         if ((pngWriteQueue.size() >= 10 && !isWriting) || (finished && pngWriteQueue.size() != 0)) {
-    //             isWriting = true;
-    //             var tasks = [];
-    //             while (!pngWriteQueue.isEmpty()) {
-    //                 tasks.push(writePNGToDisk.bind(pngWriteQueue.dequeue()));
-    //             }
-    //             async.parallelLimit(tasks, 10, () => {
-    //                 // derefence the tasks so they are garbage collected (hopefully)
-    //                 tasks = null;
-
-    //                 // check to see if we should combine pngs into a tmp video then delete them or not
-    //                 if (makeTmpVideo) {
-    //                     makeTmpVideo = false;
-    //                     var vidName = constructNumberedFileName(exportName, numTmpVideos, 'mp4');
-    //                     tmpVids.push(vidName);
-    //                     numTmpVideos++;
-    //                     console.log('making temp video');
-    //                     combinePNGImagesToMP4(exportName, vidName, () => {
-    //                         deletePNGs(exportName, () => {
-    //                             isWriting = false;
-    //                             console.log('deleted all pngs');
-
-    //                             if (!finished) {
-    //                                 // start capturing frames again if the animation hasn't finished
-    //                                 frameCount = 0;
-    //                                 pngFileName = constructNumberedFileName(exportName, frameCount, 'png');
-    //                                 midiAnimation.skipForwardBySeconds(incrementLength);
-    //                                 getPNGBuffer(postCaptureCallback);
-    //                             }
-    //                         });
-    //                     });
-    //                 } else {
-    //                     isWriting = false;
-    //                 }
-    //             });
-    //              // if a tmp video is about to be made we shouldn't capture anymore frames until it is done
-    //             // so we should return from the postCaptureCallback function.
-    //             if (makeTmpVideo) {
-    //                 return;
-    //             }
-    //         }
-
-    //         if (!finished) {
-
-    //             frameCount++;
-
-    //             // we should create a video whenever we end up with 500 pngs on disk
-    //             // to avoid too much disk space being taken up
-    //             if (frameCount == 50) {
-    //                 makeTmpVideo = true;
-    //             }
-    //             pngFileName = constructNumberedFileName(exportName, frameCount, 'png');
-    //             midiAnimation.skipForwardBySeconds(incrementLength);
-    //             getPNGBuffer(postCaptureCallback);
-    //         } else {
-    //             // this will reset the animation to its start state
-    //             midiAnimation.setExporting(false);
-    //             callback();
-    //         }
-    //     };
-
-    //     getPNGBuffer(postCaptureCallback);
-
-    // };

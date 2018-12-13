@@ -31,10 +31,17 @@ exportButton.addEventListener('click', function(event) {
     if (!exportPath) return;
 
     exportButton.disabled = true;
-    exporter.export(exportPath,() => {
+    playButton.disabled = true;
+    pauseButton.disabled = true;
+    fileInput.disabled = true;
+
+    exporter.export(exportPath)
+    .then(() => {
         exportButton.disabled = false;
+        playButton.disabled = false;
+        pauseButton.disabled = false;
+        fileInput.disabled = false;
     });
-    //exporter.export(midiAnimation.dimensions);
 });
 
 // assumes the file is located in ./res/*
