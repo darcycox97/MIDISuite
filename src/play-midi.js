@@ -44,7 +44,6 @@ exportButton.addEventListener('click', function(event) {
     });
 });
 
-// assumes the file is located in ./res/*
 fileInput.addEventListener('click', function(event) {
     filePaths = dialog.showOpenDialog({
         filters: [
@@ -64,6 +63,24 @@ fileInput.addEventListener('click', function(event) {
         midiAnimation.initialize(noteQueues);
     });
     fileInputDisplay.innerHTML = path.basename(midiFile);
+});
+
+
+imageInput.addEventListener('click', function(event) {
+    imagePaths = dialog.showOpenDialog({
+        filters: [
+            {
+                name: "Images",
+                extensions: ["png", "jpg"]
+            }
+        ]
+    });
+    if (!imagePaths) return;
+    var bgImage = imagePaths[0];
+
+    console.log('updating with ' + bgImage);
+    midiAnimation.setBackgroundImagePath(bgImage);
+    imageInputDisplay.innerHTML = path.basename(bgImage);
 });
 
 addEventListener('playNote', function(event) {

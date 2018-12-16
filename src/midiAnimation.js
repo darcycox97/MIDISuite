@@ -7,16 +7,14 @@ const PREVIEW_WIDTH = 300;
 const NOTE_RADIUS = 4;
 const NOTE_HEIGHT = CANVAS_HEIGHT / 88;
 
-const backgroundImgPath = 'test_files/clair_de_lune.jpg';
+var backgroundImgPath;
 var backgroundImg;
 
 var buckets = require('buckets-js'); // for queue data structure
+var path = require('path');
 
 // initialize the canvas
 var elem = document.getElementById('two');
-elem.style.backgroundImage = "url('" + backgroundImgPath + "')";
-elem.style.backgroundSize = CANVAS_WIDTH + 'px ' + CANVAS_HEIGHT + 'px';
-elem.style.backgroundRepeat = 'no-repeat';
 var two = new Two({ width: CANVAS_WIDTH, height: CANVAS_HEIGHT }).appendTo(elem);
 
 // init preview canvas
@@ -34,6 +32,7 @@ scrollSpeed.addEventListener('input', updateScrollSpeed);
 var previewBackground = twoPreview.makeRectangle(PREVIEW_WIDTH / 2, PREVIEW_HEIGHT / 2, PREVIEW_WIDTH, PREVIEW_HEIGHT);
 previewBackground.noStroke();
 previewBackground.fill = bgColor.value;
+previewBackground.opacity = 0;
 var previewNote = twoPreview.makeRoundedRectangle(PREVIEW_WIDTH / 2, PREVIEW_HEIGHT / 2, 80, CANVAS_HEIGHT / 88, NOTE_RADIUS);
 previewNote.noStroke();
 previewNote.fill = noteColor.value;
@@ -275,4 +274,18 @@ exports.dimensions = {
 exports.backgroundImage = () => {
     return backgroundImg;
 };
+
+exports.setBackgroundImagePath = (bgImage) => {
+    backgroundImgPath = path.relative("", bgImage);
+    backgroundImgPath = backgroundImgPath.replace(/\\/g,'/');
+
+    elem.style.backgroundImage = 'url(' + backgroundImgPath + ')';
+    elem.style.backgroundSize = CANVAS_WIDTH + 'px ' + CANVAS_HEIGHT + 'px';
+    elem.style.backgroundRepeat = 'no-repeat';
+
+    preview.style.backgroundImage = 'url(' + backgroundImgPath + ')';
+    preview.style.backgroundSize = PREVIEW_WIDTH + 'px ' + PREVIEW_HEIGHT + 'px';
+    preview.style.backgroundRepeat = 'no-repeat';
+};
+
 exports.finished = isFinished;
