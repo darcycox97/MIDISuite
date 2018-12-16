@@ -4,7 +4,7 @@ const CANVAS_HEIGHT = 619;
 const CANVAS_WIDTH = 1100;
 const PREVIEW_HEIGHT = 200;
 const PREVIEW_WIDTH = 300;
-const NOTE_RADIUS = 4;
+const NOTE_RADIUS = 3;
 const NOTE_HEIGHT = CANVAS_HEIGHT / 88;
 
 var backgroundImgPath;
@@ -25,6 +25,8 @@ var twoPreview = new Two({ width: CANVAS_WIDTH, height: CANVAS_HEIGHT }).appendT
 var scrollSpeed = document.getElementById('scrollSpeed');
 var noteColor = document.getElementById('noteColor');
 var bgColor = document.getElementById('bgColor');
+var playBarColor = document.getElementById('playBarColor');
+var noteOpacitySlider = document.getElementById('noteOpacity');
 
 scrollSpeed.addEventListener('input', updateScrollSpeed);
 
@@ -37,16 +39,27 @@ var previewNote = twoPreview.makeRoundedRectangle(PREVIEW_WIDTH / 2, PREVIEW_HEI
 previewNote.noStroke();
 previewNote.fill = noteColor.value;
 twoPreview.update();
+
 noteColor.addEventListener('input', function(e) {
     previewNote.fill = noteColor.value;
     twoPreview.update();
-    updateNoteColor();
+    updateNotes();
 });
+
+noteOpacitySlider.addEventListener('input', function(e) {
+    var opacity = noteOpacitySlider.value / 10;
+    previewNote.opacity = opacity;
+    twoPreview.update();
+    updateNotes();
+});
+
 bgColor.addEventListener('input', function(e) {
     previewBackground.fill = bgColor.value;
     twoPreview.update();
     updateBackgroundColor(); // for the main canvas
 });
+
+playBarColor.addEventListener('input', updatePlayBarColor);
 
 /////////// MAIN ANIMATION LOOP /////////////////////
 var noteQueues; // all midi information about the notes
@@ -67,11 +80,12 @@ var scrollRatePerSecond = scrollSpeed.value;
 // units per frame = units per second / frames per second
 var scrollRate = scrollRatePerSecond / 60;
 
-var playBarWidth = 2;
+var playBarWidth = 3;
 var playBar = two.makeRectangle(CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2, playBarWidth, CANVAS_HEIGHT);
 var playBarCollisionPoint = CANVAS_WIDTH / 2 + playBarWidth / 2;
 playBar.fill = '#000000';
 playBar.opacity = 0.5;
+playBar.noStroke();
 
 var background = two.makeRectangle(CANVAS_WIDTH/2, CANVAS_HEIGHT/2, CANVAS_WIDTH, CANVAS_HEIGHT);
 background.fill = bgColor.value;
@@ -108,7 +122,7 @@ two.bind('update', function() {
             if (!noteQueue.isEmpty()) {
                 var note = noteQueue.peek();
                 if (note.shape.translation.x <= offset + playBarCollisionPoint + note.width / 2) {
-                    note.shape.opacity = 0.2;
+                    note.shape.opacity = note.shape.opacity / 5;
                     noteQueue.dequeue();
                     if (!isExporting) {
                         dispatchEvent(new CustomEvent('playNote', {detail: note.pianoNote}));
@@ -160,10 +174,15 @@ function updateBackgroundColor() {
     background.fill = bgColor.value;
 }
 
-function updateNoteColor() {
+function updateNotes() {
     allNotes.forEach((note) => {
         note.shape.fill = noteColor.value;
+        note.shape.opacity = noteOpacitySlider.value / 10;
     })
+}
+
+function updatePlayBarColor() {
+    playBar.fill = playBarColor.value;
 }
 
 function drawEntireMidiFile() {
