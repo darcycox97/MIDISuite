@@ -7,10 +7,16 @@ const PREVIEW_WIDTH = 300;
 const NOTE_RADIUS = 4;
 const NOTE_HEIGHT = CANVAS_HEIGHT / 88;
 
+const backgroundImgPath = 'test_files/clair_de_lune.jpg';
+var backgroundImg;
+
 var buckets = require('buckets-js'); // for queue data structure
 
 // initialize the canvas
 var elem = document.getElementById('two');
+elem.style.backgroundImage = "url('" + backgroundImgPath + "')";
+elem.style.backgroundSize = CANVAS_WIDTH + 'px ' + CANVAS_HEIGHT + 'px';
+elem.style.backgroundRepeat = 'no-repeat';
 var two = new Two({ width: CANVAS_WIDTH, height: CANVAS_HEIGHT }).appendTo(elem);
 
 // init preview canvas
@@ -43,7 +49,6 @@ bgColor.addEventListener('input', function(e) {
     updateBackgroundColor(); // for the main canvas
 });
 
-
 /////////// MAIN ANIMATION LOOP /////////////////////
 var noteQueues; // all midi information about the notes
 var isPlaying = false;
@@ -71,6 +76,7 @@ playBar.opacity = 0.5;
 
 var background = two.makeRectangle(CANVAS_WIDTH/2, CANVAS_HEIGHT/2, CANVAS_WIDTH, CANVAS_HEIGHT);
 background.fill = bgColor.value;
+background.opacity = 0;
 background.noStroke();
 
 two.bind('update', function() {
@@ -248,6 +254,8 @@ exports.setExporting = function(exporting) {
     // animation to its initial state
     drawEntireMidiFile();
     if (isExporting) {
+        backgroundImg = document.createElement('img');
+        backgroundImg.src = backgroundImgPath;
         isPlaying = true;
     } else {
         isPlaying = false;
@@ -264,4 +272,7 @@ exports.dimensions = {
     height: CANVAS_HEIGHT
 };
 
+exports.backgroundImage = () => {
+    return backgroundImg;
+};
 exports.finished = isFinished;

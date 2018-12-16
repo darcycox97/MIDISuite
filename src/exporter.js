@@ -21,8 +21,6 @@ loader.height = canvas.height = 1080;
 
 // TODO: 
 // - Migrate png capture functions to new module ?? or ffmpeg
-// - captureAllFrames should periodically combine the tmp videos then delete the pngs and reset framecount
-// - cleanup function (delete any pngs or tmp videos remaining, then delete tmp folder)
 
 
 exports = module.exports = {};
@@ -41,8 +39,12 @@ exports.export = function (exportPath) {
             return captureAllFrames(exportBasename);
         })
         .then((tmpVideoNames) => {
-            console.log('combining videos');
-            return combineTmpVideos(tmpVideoNames, exportPath);
+            console.log('combining videos / producing final video');
+            if (tmpVideoNames.length == 0) {
+                return combinePNGImagesToMP4(exportBasename, exportPath);
+            } else {
+                return combineTmpVideos(tmpVideoNames, exportPath);
+            }
         })
         .then(() => {
             console.log('cleaning up');
@@ -79,7 +81,7 @@ function captureAllFrames(basename) {
             captureSingleFrame(pngFileName)
             .then(() => {
                 if (!midiAnimation.finished()) {
-                    if (frameCount >= 50) {
+                    if (frameCount >= 500) {
                         // once we hit the max number of pngs we want on disk,
                         // create a temp mp4 to save space
                         frameCount = 0;
@@ -248,7 +250,9 @@ function getPNGData() {
     return new Promise((resolve) => {
         // called whenever the image src has been set and has finished loading
         loader.onload = () => {
-            // add the loaded image to the canvas
+            // add the loaded image to the canvas and redraw the background
+            ctx.clearRect(0, 0, 1920, 1080);
+            ctx.drawImage(midiAnimation.backgroundImage(), 0, 0, 1920, 1080);
             ctx.drawImage(loader, 0, 0, 1920, 1080);
 
             // extract the binary data from the canvas (a "blob")
