@@ -9,7 +9,7 @@ const buckets = require('buckets-js');
 const WIDTH_PATTERN = '$W$';
 const HEIGHT_PATTERN = '$H$';
 const TMP_DIR = './.tmpMIDISuite';
-const FRAME_RATE = 1;
+const FRAME_RATE = 30;
 
 var svgElement = document.getElementById('two').querySelector("svg");
 var canvas = document.createElement('canvas');

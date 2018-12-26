@@ -145,6 +145,7 @@ function drawNote(noteWidth, xOffset, noteIndex, activeNoteQueue) {
         NOTE_RADIUS
     );
     note.fill = noteColor.value;
+    note.opacity = noteOpacitySlider.value / 10;
     note.noStroke();
     note.lineWidth = 0;
     allNotes.add({shape: note, width: noteWidth});

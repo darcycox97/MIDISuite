@@ -12,3 +12,20 @@ export.onclick = ...
 3. capture svgs in 1/30th of a second increments and stop when all notes are off screen. save as basename-00000.svg etc
 4. convert all svgs to png scaling to 1920x1080 then delete svgs
 5. ffmpeg blah blah make sure paths are correct output = specified file frame rate = 30 fps
+
+
+ffmpeg -f concat -i mylist.txt -c copy output
+where mylist.txt is a text file with
+file path/to/file as each line
+
+command to overlay the video on top of the background img:
+- use overlay filter, shortest=1 so it stops once video is over
+- loop input image
+- scale image to 1920 x 1080
+
+ffmpeg -loop 1 -i image.png -i video.mp4 -filter_complex "[0:v]scale=1920x1080;[0:v]overlay=(W-w)/2:(H-h)/2:shortest=1" output.mp4
+
+
+
+COOL IDEA!!
+When notes become inactive they could slow down, giving a parallax effect
