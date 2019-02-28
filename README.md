@@ -17,5 +17,8 @@ MIDISuite is an [electron](https://electronjs.org/) app that allows you to creat
 - [Clair De Lune](https://www.youtube.com/watch?v=e0igUG8pPvQ)
 - [Nocturne - Op. 9 No. 2](https://www.youtube.com/watch?v=RHlyHq5ohvM)
 
+![Example](https://github.com/darcycox97/MIDISuite/blob/master/test_files/example_1.png?raw=true)
+![Example](https://github.com/darcycox97/MIDISuite/blob/master/test_files/example_2.png?raw=true)
+
 ### Future work
 - Build a nice UI
