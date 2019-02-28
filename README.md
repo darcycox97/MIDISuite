@@ -1,5 +1,21 @@
-# MIDISuite
-A visualization project for MIDI files
+# MIDISuite: A visualization project for MIDI files
+MIDISuite is an [electron](https://electronjs.org/) app that allows you to create customisable visualisations of [MIDI files](https://www.lifewire.com/midi-file-2621979).
 
-Should be able to run it if you have npm / electron installed with `npm start`
-A more comprehensive guide of how to set up and use this repo will be added once I'm not in such early dev stages
+### How to run it
+- Clone this repo
+- Navigate to the project directory on the command line and run the following commands:
+  - `npm install`
+  - `npm start`
+
+### Features
+- Choose MIDI file + background image
+- Customisable notes (color, opacity)
+- Adjustable scroll speed (how fast the notes move)
+- Export to MP4
+
+### Examples
+- [Clair De Lune](https://www.youtube.com/watch?v=e0igUG8pPvQ)
+- [Nocturne - Op. 9 No. 2](https://www.youtube.com/watch?v=RHlyHq5ohvM)
+
+### Future work
+- Build a nice UI
