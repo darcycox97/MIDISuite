@@ -57,6 +57,7 @@ bgColor.addEventListener('input', function(e) {
     previewBackground.fill = bgColor.value;
     twoPreview.update();
     updateBackgroundColor(); // for the main canvas
+    updateNotes();
 });
 
 playBarColor.addEventListener('input', updatePlayBarColor);
@@ -179,6 +180,7 @@ function updateNotes() {
     allNotes.forEach((note) => {
         note.shape.fill = noteColor.value;
         note.shape.opacity = noteOpacitySlider.value / 10;
+        note.shape.stroke = bgColor.value;
     })
 }
 
