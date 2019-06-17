@@ -146,8 +146,8 @@ function drawNote(noteWidth, xOffset, noteIndex, activeNoteQueue) {
     );
     note.fill = noteColor.value;
     note.opacity = noteOpacitySlider.value / 10;
-    note.noStroke();
-    note.lineWidth = 0;
+    note.stroke = bgColor.value;
+    note.lineWidth = 5;
     allNotes.add({shape: note, width: noteWidth});
     activeNoteQueue.enqueue({shape: note, width: noteWidth, pianoNote: noteIndex});
 }
